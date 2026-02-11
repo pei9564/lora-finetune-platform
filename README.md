@@ -1,206 +1,102 @@
-# 🧠 Finetune Platform — 端到端 LoRA 訓練與實驗管理平台
+# Finetune Platform — 端到端 LoRA 訓練與實驗管理平台
 
-> 一個以 **FastAPI、Celery、Redis、MLflow、Kubernetes** 打造的生產級 LoRA 微調與實驗治理平台。
->
-> 支援從 **資料驗證 → 模型訓練 → 實驗追蹤 → 模型治理 → 部署監控** 的完整生命週期。
+本專案是一個基於生產環境思維設計的 LoRA (Low-Rank Adaptation) 微調平台，旨在整合從數據校驗、非同步訓練、實驗追蹤到模型治理的完整生命週期。
 
----
+本專案榮獲 **2025 iThome 鐵人賽「生成式 AI 組」佳作**。
 
-## ✨ 主要特色
-
-* 🚀 **多硬體支援** — 同時支援 CPU、NVIDIA CUDA 與 Apple MPS (M3 晶片)
-* 📊 **資料管理** — 提供資料驗證、版本追蹤與分布分析
-* 🎯 **實驗追蹤 (Experiment Tracking)** — 整合 MLflow，自動記錄參數、指標與模型產物
-* 📦 **模型卡與推薦 (Model Registry & Recommendation)** — 自動生成 Model Card，支援搜尋與語義推薦
-* 🧾 **模型治理 (Model Governance)** — 整合 MLflow Registry，支援 Staging / Production / Archived 階段
-* ☸️ **Kubernetes + Helm 部署** — 模組化 Helm Chart，支援多環境配置 (`values.yaml`, `values.prod.yaml`)
-* 🧰 **CI/CD 自動化** — GitHub Actions + Docker + Helm Dry-run 完整流程
-* 📈 **系統監控與可觀測性** — Prometheus Exporter + Grafana Dashboard
-* 🌐 **網頁操作介面** — 支援任務提交、進度監控、實驗瀏覽
-* 🔄 **非同步任務排程** — Celery + Redis 任務佇列
-* 🔐 **安全機制與權限控管** — JWT 驗證 + RBAC 角色管理
-* 🧾 **操作審計日誌 (Audit Logging)** — 完整 API 操作追蹤
-* 🧪 **測試覆蓋完整** — 單元測試 + 錯誤處理驗證
-* 🏗️ **模組化架構設計** — 清晰職責分離，易於維護與擴充
+* **專案主題**：打造 AI 微調平台：從系統設計到 AI 協作的 30 天實戰筆記
+* **開發模式**：本專案深度實踐了 AI 協作開發範式，全系統約 80% 核心代碼與配置由 **ChatGPT-4o** 與 **Cursor** 協作生成。開發過程中的架構決策、Prompt 指令集以及人機調優筆記，均詳細記錄於鐵人賽系列文章中。
 
 ---
 
-## 🔄 系統互動流程
+## 系統核心架構
 
-```mermaid
-sequenceDiagram
-    participant U as 使用者
-    participant UI as Web UI
-    participant API as FastAPI
-    participant C as Celery Worker
-    participant T as 訓練腳本
-    participant M as MLflow
-    participant R as Redis
-    participant P as Prometheus
+本平台採用解耦的雲原生分層架構，確保計算密集型任務（LLM Fine-tuning）與管理平面（Control Plane）的隔離，以適應生產環境的擴展需求：
 
-    U->>UI: 提交訓練參數
-    UI->>API: POST /train
-    API->>C: 提交 Celery 任務
-    C->>R: 任務入佇列
-    API-->>UI: 回傳 task_id
+* **接入與控制層 (Control Plane)**：
+  * **API Layer**: 使用 FastAPI 構建，透過 Kubernetes Service 暴露接口。負責處理任務提交、JWT 驗證、RBAC 權限控管與任務狀態分發。
 
-    loop 任務輪詢
-        UI->>API: GET /task/{task_id}
-        API->>R: 查詢任務狀態
-        API-->>UI: 更新進度
-    end
+* **邏輯調度層 (Orchestration Layer)**：
+  * **Task Orchestration**: 透過 Celery + Redis 實現非同步任務調度。Redis 作為 Message Broker 確保任務可靠分發，並針對長時訓練任務設計了狀態輪詢與錯誤重試邏輯。
 
-    C->>T: 執行 LoRA 訓練
-    T->>M: 上傳參數 / 指標 / 模型產物
-    T->>Registry: 註冊模型 (ModelCard + Stage)
-    API->>P: 匯出 metrics（任務耗時、佇列長度、成功數）
-    P-->>Grafana: 顯示 Dashboard
+* **執行運算層 (Execution Layer)**：
+  * **Fine-tuning Engine**: 訓練腳本支援自動硬體檢測。在 Linux 環境優先使用 NVIDIA CUDA，在 macOS (M3/M4) 環境則自動啟用 Apple MPS 加速。
+  * **Kubernetes Pod Resources Limit**: 嚴格控管運算資源，確保訓練任務的穩定性。
+
+* **存儲與治理層 (Governance Layer)**：
+  * **MLOps Integration**: 整合 MLflow Tracking 即時記錄實驗指標與產物，並透過 Model Registry 實現實驗版本化與階段狀態管理。
+
+---
+
+## 技術細節與功能實現
+
+### 1. 實驗追蹤與模型治理 (MLOps)
+
+系統不再僅僅產出權重文件，而是將每次訓練視為一個完整的實驗實體：
+
+* **自動化 Model Card**: 每次訓練結束後，系統會自動產出符合規範的 JSON 元數據，作為模型治理與語義推薦的基礎。
+* **生命週期管理**: 整合 MLflow Registry API，支援模型在 `Staging`（測試中）、`Production`（已部署）、`Archived`（已歸檔）各階段的狀態轉換，確保環境穩定性。
+
+#### Model Card JSON 範例
+
+```json
+{
+  "id": "chinese-sentiment-v1",
+  "name": "Chinese Sentiment Model",
+  "base_model": "bert-base-chinese",
+  "language": "zh",
+  "task": "sentiment",
+  "description": "Fine-tuned BERT for Chinese movie reviews",
+  "metrics": { "accuracy": 0.89 },
+  "tags": ["中文", "情感分析", "bert"],
+  "embedding": [0.1, 0.2, -0.05, 0.3]
+}
 ```
 
----
+### 2. 數據驗證與向量化推薦
 
-## 🏗️ 系統架構圖
+* **Schema-Driven Data Validation**: 在進入訓練隊列前，對上傳數據進行格式檢查與分佈分析，避免無效任務佔用資源。
+* **語義推薦系統**: 利用 Model Card 中的 `embedding` 向量實現語義相似度推薦。用戶可透過自然語言描述需求，系統將自動推薦最符合的適配器（Adapter）。
 
-```
-graph TB
-    subgraph Training["訓練流程"]
-        Train[train_lora_v2.py] --> MLflow[MLflow Tracking]
-        MLflow --> Registry[MLflow Registry]
-        Registry --> ModelCard[ModelCard JSON]
-        Train --> Results[(results/)]
-        Results --> Config[config.yaml]
-        Results --> Model[final_model/]
-    end
+### 3. 可觀測性 (Observability)
 
-    subgraph Monitoring["監控系統"]
-        Exporter[Prometheus Exporter] --> P[Prometheus Server]
-        P --> G[Grafana Dashboard]
-    end
-
-    subgraph CI/CD["自動化部署流程"]
-        GH[GitHub Actions] --> Build[Docker Build]
-        Build --> HelmDryRun[Helm dry-run]
-        Build --> Push[DockerHub Push (tag=day-*)]
-    end
-```
+* **Prometheus Exporter**: 監控 `task_queue_length`（積壓監控）、`task_duration_seconds`（效能分析）及 `task_failure_total`。
+* **Grafana Dashboard**: 提供可視化面板，實時監測節點負載與訓練任務趨勢。
 
 ---
 
-## 📦 模型卡與推薦 (Model Registry & Recommendation)
+## 部署與自動化 (CI/CD)
 
-每次訓練完成後，系統會自動生成一份 **Model Card (JSON)**，
-儲存在 `data/model_registry/`，內容包含：
+本專案採用 Helm 作為部署標準：
 
-* `base_model`, `language`, `task`, `description`, `metrics`, `tags`
-* 可選用 `embedding` 向量，用於語義相似度搜尋（semantic search）
-
-### 🔍 主要 API
-
-| Endpoint             | 方法   | 功能說明                                    |
-| -------------------- | ---- | --------------------------------------- |
-| `/models/search`     | GET  | 依 base_model / 語言 / 任務 / 標籤 搜尋模型        |
-| `/models/recommend`  | POST | 根據 embedding 相似度推薦模型                    |
-| `/models/transition` | POST | 控管模型階段（Staging → Production → Archived） |
-
-> 未來將支援 **自然語言查詢推薦**，自動將文字查詢轉換為向量進行語義比對。
+* **Helm Chart 結構**: 分離 `values.yaml` (Dev) 與 `values.prod.yaml` (Production)，並透過 StatefulSet 維護 Redis 數據持久化。
+* **GitHub Actions 工作流**:
+* **CI**: 自動執行 Pytest 單元測試與 Linting。
+* **CD**: 通過 Helm Dry-run 驗證並自動建置帶有版本標籤的 Docker 鏡像。
 
 ---
 
-## 🧾 實驗追蹤與模型治理 (Experiment Tracking & Model Governance)
+## 快速啟動範例
 
-### **MLflow Tracking**
+### 環境配置
 
-* 自動記錄訓練參數 (`params`)、指標 (`metrics`) 與模型產物 (`artifacts`)
-* 可於 MLflow UI 比較不同實驗的曲線
-* 提供 API `/experiments/mlflow/{run_id}` 查詢詳細結果
+於根目錄建立 `.env` 文件：
 
-### **MLflow Registry**
-
-* 每個模型以 `run_id` 對應唯一版本
-* 階段管理：`Staging`、`Production`、`Archived`
-* 自動歸檔舊 Production 模型，確保僅保留最新上線版本
-* Model Card 與 Registry 狀態完全同步
-
----
-
-## ☸️ Helm 部署
-
-**Chart 結構**
-
-```
-charts/finetune-platform/
-├── Chart.yaml
-├── values.yaml
-├── values.prod.yaml
-└── templates/
-    ├── api-deployment.yaml
-    ├── worker-deployment.yaml
-    ├── redis-statefulset.yaml
-    ├── ui-deployment.yaml
-    ├── secret.yaml
-    ├── service.yaml
-    └── _helpers.tpl
+```env
+REDIS_URL=redis://localhost:6379/0
+MLFLOW_TRACKING_URI=http://localhost:5000
+JWT_SECRET=your_secret_key
 ```
 
-**部署範例**
+### 使用 Helm 部署至 Kubernetes
 
 ```bash
-# 開發環境
-helm install finetune charts/finetune-platform -f values.yaml
-
-# 正式環境
-helm upgrade finetune charts/finetune-platform -f values.yaml -f values.prod.yaml
+helm install finetune-platform ./charts/finetune-platform -f ./charts/finetune-platform/values.yaml
 ```
 
 ---
 
-## 🔄 CI/CD 自動化流程（GitHub Actions）
+## 參考資料
 
-| 分支 / Tag      | 執行內容                         | 說明                  |
-| ------------- | ---------------------------- | ------------------- |
-| 任意分支 / PR     | Lint + Test                  | 程式碼品質與測試驗證          |
-| `main` 分支     | Lint + Test + Helm Dry-Run   | 驗證 Helm Chart 可正確部署 |
-| `tag = day-*` | Build + Push + Deploy (echo) | 模擬發版流程              |
-
-### **流程亮點**
-
-* ✅ Lint + Test：確保程式碼品質與單元測試完整性
-* 🧱 Helm Dry-run：模擬部署模板的正確性
-* 📦 Tag 發版：自動建置並推送 Docker 映像
-
----
-
-## 📊 可觀測性與監控 (Prometheus + Grafana)
-
-平台內建 **Prometheus Exporter**，提供 `/metrics` 端點，
-由 Prometheus 定期抓取，並於 Grafana Dashboard 視覺化顯示。
-
-### **指標一覽**
-
-| 指標名稱                                       | 說明                       |
-| ------------------------------------------ | ------------------------ |
-| `task_success_total`, `task_failure_total` | 累計任務成功與失敗數               |
-| `task_queue_length`                        | 當前待處理任務數量                |
-| `task_duration_seconds`                    | 任務執行耗時直方圖                |
-| `system_cpu_percent`                       | API / Worker CPU 使用率 (%) |
-| `system_memory_usage_gigabytes`            | 記憶體使用量 (GB)              |
-
-### **Grafana 圖表**
-
-| 圖表名稱        | 查詢公式                                                                        | 目的       |
-| ----------- | --------------------------------------------------------------------------- | -------- |
-| 任務成功 / 失敗計數 | `increase(task_success_total[5m])`                                          | 觀察任務結果變化 |
-| 任務佇列長度      | `task_queue_length`                                                         | 偵測系統壅塞情況 |
-| 平均任務耗時      | `rate(task_duration_seconds_sum[5m])/rate(task_duration_seconds_count[5m])` | 追蹤任務效能   |
-| CPU 使用率     | `max(system_cpu_percent)`                                                   | 檢查系統負載   |
-| 記憶體使用量      | `max(system_memory_usage_gigabytes)`                                        | 監控資源健康度  |
-
----
-
-## ⚙️ 部署與設定注意事項
-
-* `.env` 檔可設定 Redis / API / UI 服務埠
-* 建議於生產環境使用 **Helm + CI/CD 自動化流程**
-* Prometheus / Grafana 可透過 `values.monitoring.yaml` 擴充
-* MLflow、Registry、Exporter 須配置對應 Volume 與 Port
-* 生產環境請使用 **HTTPS**
+* **實戰筆記**：[打造 AI 微調平台：從系統設計到 AI 協作的 30 天實戰筆記](https://ithelp.ithome.com.tw/users/20151660/ironman/8264)
+* **開發工具**：ChatGPT-4o, Cursor, GitHub Actions, Helm
