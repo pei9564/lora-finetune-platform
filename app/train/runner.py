@@ -133,7 +133,7 @@ def load_and_process_data(
 
     dataset = load_dataset(
         config.data.dataset_name,
-        config.data.subset,
+        config.data.dataset_config,
         split="train",
         trust_remote_code=True,
     )
@@ -144,8 +144,8 @@ def load_and_process_data(
     eval_dataset = dataset["test"]
 
     # 如果指定了訓練樣本數，則只使用部分數據
-    if config.training.train_samples:
-        train_dataset = train_dataset.select(range(config.training.train_samples))
+    if config.data.train_samples:
+        train_dataset = train_dataset.select(range(config.data.train_samples))
 
     logger.info(f"✅ 訓練集大小: {len(train_dataset)}")
     logger.info(f"✅ 驗證集大小: {len(eval_dataset)}")

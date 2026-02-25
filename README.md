@@ -1,102 +1,351 @@
-# Finetune Platform — 端到端 LoRA 訓練與實驗管理平台
+# Finetune Platform — Production-Grade LoRA Training & MLOps System
 
-本專案是一個基於生產環境思維設計的 LoRA (Low-Rank Adaptation) 微調平台，旨在整合從數據校驗、非同步訓練、實驗追蹤到模型治理的完整生命週期。
+A **full-lifecycle MLOps platform** for LoRA fine-tuning of transformer models — built by one developer in 30 days, using AI as a force multiplier.
 
-本專案榮獲 **2025 iThome 鐵人賽「生成式 AI 組」佳作**。
+The system covers the complete pipeline: **Data → Training → Deployment → Observation**, with production engineering baked in from the start: async task isolation, experiment governance, RBAC security, and end-to-end observability.
 
-* **專案主題**：打造 AI 微調平台：從系統設計到 AI 協作的 30 天實戰筆記
-* **開發模式**：本專案深度實踐了 AI 協作開發範式，全系統約 80% 核心代碼與配置由 **ChatGPT-4o** 與 **Cursor** 協作生成。開發過程中的架構決策、Prompt 指令集以及人機調優筆記，均詳細記錄於鐵人賽系列文章中。
-
----
-
-## 系統核心架構
-
-本平台採用解耦的雲原生分層架構，確保計算密集型任務（LLM Fine-tuning）與管理平面（Control Plane）的隔離，以適應生產環境的擴展需求：
-
-* **接入與控制層 (Control Plane)**：
-  * **API Layer**: 使用 FastAPI 構建，透過 Kubernetes Service 暴露接口。負責處理任務提交、JWT 驗證、RBAC 權限控管與任務狀態分發。
-
-* **邏輯調度層 (Orchestration Layer)**：
-  * **Task Orchestration**: 透過 Celery + Redis 實現非同步任務調度。Redis 作為 Message Broker 確保任務可靠分發，並針對長時訓練任務設計了狀態輪詢與錯誤重試邏輯。
-
-* **執行運算層 (Execution Layer)**：
-  * **Fine-tuning Engine**: 訓練腳本支援自動硬體檢測。在 Linux 環境優先使用 NVIDIA CUDA，在 macOS (M3/M4) 環境則自動啟用 Apple MPS 加速。
-  * **Kubernetes Pod Resources Limit**: 嚴格控管運算資源，確保訓練任務的穩定性。
-
-* **存儲與治理層 (Governance Layer)**：
-  * **MLOps Integration**: 整合 MLflow Tracking 即時記錄實驗指標與產物，並透過 Model Registry 實現實驗版本化與階段狀態管理。
+**🏆 Honorable Mention — iThome Ironman 2025, Generative AI Track**
+**📖 Series Articles: [Building an AI Fine-Tuning Platform: 30 Days of System Design & AI Collaboration](https://ithelp.ithome.com.tw/users/20151660/ironman/8264)**
 
 ---
 
-## 技術細節與功能實現
+## Why This Project
 
-### 1. 實驗追蹤與模型治理 (MLOps)
+Most fine-tuning tutorials stop at `trainer.train()`. This project asks what comes after — the harder engineering questions that production systems actually demand:
 
-系統不再僅僅產出權重文件，而是將每次訓練視為一個完整的實驗實體：
+- How do you run long training jobs without blocking the API?
+- How do you track, compare, and govern model versions across experiments?
+- How do you monitor a training system in production, not just dev?
+- How do you deploy this whole stack repeatably?
+- **How do you build all of this — alone, in 30 days?**
 
-* **自動化 Model Card**: 每次訓練結束後，系統會自動產出符合規範的 JSON 元數據，作為模型治理與語義推薦的基礎。
-* **生命週期管理**: 整合 MLflow Registry API，支援模型在 `Staging`（測試中）、`Production`（已部署）、`Archived`（已歸檔）各階段的狀態轉換，確保環境穩定性。
+The answer to that last question is what makes this project different.
 
-#### Model Card JSON 範例
+---
 
-```json
-{
-  "id": "chinese-sentiment-v1",
-  "name": "Chinese Sentiment Model",
-  "base_model": "bert-base-chinese",
-  "language": "zh",
-  "task": "sentiment",
-  "description": "Fine-tuned BERT for Chinese movie reviews",
-  "metrics": { "accuracy": 0.89 },
-  "tags": ["中文", "情感分析", "bert"],
-  "embedding": [0.1, 0.2, -0.05, 0.3]
-}
+## Built with AI Collaboration
+
+This platform was built through deep human-AI collaboration. Roughly **80% of core code and configuration was co-generated with ChatGPT-4o and Cursor** — not as a shortcut, but as a deliberate engineering methodology.
+
+| Tool | Role |
+|------|------|
+| ChatGPT-4o | Architecture planning, design tradeoff discussions, documentation |
+| Cursor | In-editor pair programming, refactoring, rapid iteration |
+
+**The result:** a solo developer was able to architect, implement, and ship a system that would typically require a small backend team — in 30 days.
+
+**What AI collaboration actually looks like in practice:**
+
+AI is fast at generating plausible-looking code, but production systems demand more. Even when generated code passed syntax checks, it still required debugging, logic correction, and integration testing to actually work. As module count grew, early AI-generated code often lacked generality — test coverage and clear module boundaries became critical to keep things from collapsing under their own weight.
+
+The approach that worked: **test first, then stack features.** AI accelerated the pace of exploration and seeing the right direction; real debugging and tests made the product land.
+
+> Architecture decisions, prompt strategies, and human-AI tuning notes are documented in full in the [Ironman series](https://ithelp.ithome.com.tw/users/20151660/ironman/8264).
+
+---
+
+## Demo
+
+End-to-end flow: cluster startup → login → submit training job → MLflow experiment recorded → model Registry → inference → Grafana monitoring.
+
+<video src="docs/demo.mp4" controls width="100%">
+  Your browser does not support the video tag.
+</video>
+
+---
+
+## What Was Built
+
+Over 30 days, the following modules were fully implemented and connected into a closed-loop pipeline.
+
+| Module | Capabilities Delivered |
+|--------|----------------------|
+| Task Management | Celery + Redis job scheduling and status tracking |
+| Experiment Tracking | MLflow auto-logging of params, metrics, and artifacts |
+| Model Sharing | Model Registry + semantic recommendation API |
+| Auth & Permissions | JWT + RBAC + Audit Log |
+| Deployment | Helm chart + GitHub Actions CI/CD |
+| Observability | Prometheus Exporter + Grafana Dashboard |
+| Load Testing | Locust stress tests + performance monitoring |
+| Tenant Isolation | Namespace + ResourceQuota |
+
+---
+
+## System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        Web UI (Streamlit)                   │
+│         Submit jobs · Monitor progress · Browse results     │
+└───────────────────────────┬─────────────────────────────────┘
+                            │ HTTP
+┌───────────────────────────▼─────────────────────────────────┐
+│                     FastAPI (REST API)                      │
+│   Auth (JWT/RBAC) · Task dispatch · Model search · Audit    │
+└──────────┬─────────────────────────────────┬────────────────┘
+           │ Celery task                      │ Prometheus /metrics
+┌──────────▼──────────────┐      ┌───────────▼───────────────┐
+│  Redis (Message Broker) │      │   Prometheus + Grafana    │
+│  Task queue · Results   │      │   System & task metrics   │
+└──────────┬──────────────┘      └───────────────────────────┘
+           │
+┌──────────▼──────────────────────────────────────────────────┐
+│                    Celery Worker                            │
+│                                                             │
+│   load_dataset → tokenize → LoRA inject → train → eval      │
+│          │                                      │           │
+│   DataConfig validation              MLflow logging         │
+│                                          │                  │
+│                                 MLflow Registry             │
+│                                 ModelCard JSON              │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 2. 數據驗證與向量化推薦
-
-* **Schema-Driven Data Validation**: 在進入訓練隊列前，對上傳數據進行格式檢查與分佈分析，避免無效任務佔用資源。
-* **語義推薦系統**: 利用 Model Card 中的 `embedding` 向量實現語義相似度推薦。用戶可透過自然語言描述需求，系統將自動推薦最符合的適配器（Adapter）。
-
-### 3. 可觀測性 (Observability)
-
-* **Prometheus Exporter**: 監控 `task_queue_length`（積壓監控）、`task_duration_seconds`（效能分析）及 `task_failure_total`。
-* **Grafana Dashboard**: 提供可視化面板，實時監測節點負載與訓練任務趨勢。
-
 ---
 
-## 部署與自動化 (CI/CD)
+## Tech Stack & Design Decisions
 
-本專案採用 Helm 作為部署標準：
+### Async Task Execution — Celery + Redis
 
-* **Helm Chart 結構**: 分離 `values.yaml` (Dev) 與 `values.prod.yaml` (Production)，並透過 StatefulSet 維護 Redis 數據持久化。
-* **GitHub Actions 工作流**:
-* **CI**: 自動執行 Pytest 單元測試與 Linting。
-* **CD**: 通過 Helm Dry-run 驗證並自動建置帶有版本標籤的 Docker 鏡像。
+Training jobs can run for minutes or hours. Blocking an HTTP request for that duration is not viable.
 
----
+**Design:** The API immediately returns a `task_id`, and the job runs in a Celery worker process. The client polls `/task/{task_id}` for status updates. This decouples request handling from compute, and makes the system resilient — if a worker crashes, the task can be retried.
 
-## 快速啟動範例
-
-### 環境配置
-
-於根目錄建立 `.env` 文件：
-
-```env
-REDIS_URL=redis://localhost:6379/0
-MLFLOW_TRACKING_URI=http://localhost:5000
-JWT_SECRET=your_secret_key
+```python
+# Auto-retry on OOM or timeout, with exponential backoff
+@celery_app.task(
+    autoretry_for=(OutOfMemoryError, SoftTimeLimitExceeded),
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
+    max_retries=3,
+    soft_time_limit=3600,
+)
+def train_lora(config_dict: dict) -> dict:
+    ...
 ```
 
-### 使用 Helm 部署至 Kubernetes
+Redis serves as both the Celery broker and the result backend, keeping the dependency footprint small.
+
+### Parameter-Efficient Fine-Tuning — PEFT / LoRA
+
+Full fine-tuning of large transformer models is compute-prohibitive for most use cases. LoRA injects trainable rank-decomposition matrices into attention layers, training only ~0.1–1% of parameters while preserving most of the model's original capability.
+
+```python
+lora_config = LoraConfig(
+    r=config.lora.r,               # Rank: controls adapter capacity
+    lora_alpha=config.lora.lora_alpha,
+    target_modules=config.lora.target_modules,
+    lora_dropout=config.lora.lora_dropout,
+    task_type="SEQ_CLS",
+)
+model = get_peft_model(model, lora_config)
+```
+
+### Experiment Tracking & Model Governance — MLflow
+
+Every training run automatically logs parameters, metrics, and artifacts to MLflow. The platform implements a full model lifecycle:
+
+```
+Training completes
+      │
+      ▼
+MLflow run logged (params + metrics + model artifact)
+      │
+      ▼
+Model registered to MLflow Registry
+      │
+      ▼
+Stage: Staging ──► Production ──► Archived
+      │
+      ▼
+ModelCard JSON saved (base_model, task, metrics, tags, run_id)
+```
+
+Any version can be reproduced, compared, or promoted/demoted via API.
+
+### Configuration — Pydantic Models + YAML
+
+All training parameters are validated through Pydantic models before a job starts, catching misconfiguration at submission time rather than mid-training.
+
+```python
+class DataConfig(BaseModel):
+    dataset_name: str = Field(default="glue")
+    dataset_config: str = Field(default="sst2")   # HuggingFace dataset subset
+    train_samples: int = Field(default=500)
+    eval_samples: int = Field(default=100)
+    max_length: int = Field(default=128)
+    validation_rules: dict = Field(default={...})
+```
+
+### Security — JWT + RBAC + Audit Log
+
+The API is protected with JWT authentication and role-based access control. Every API call is automatically captured by a middleware layer and written to an SQLite audit log.
+
+```
+Request → AuditLogMiddleware → Route handler
+               │
+               ▼
+    audit_log(user_id, role, method, path, status_code, timestamp)
+```
+
+### Observability — Prometheus + Grafana
+
+| Metric | Type | Purpose |
+|--------|------|---------|
+| `task_success_total` | Counter | Track job outcomes |
+| `task_failure_total` | Counter | Detect failure patterns |
+| `task_queue_length` | Gauge | Identify backpressure |
+| `task_duration_seconds` | Histogram | Latency distribution |
+| `system_cpu_percent` | Gauge | Worker load |
+| `system_memory_usage_gigabytes` | Gauge | Resource consumption |
+
+### Multi-Hardware Support
+
+Device selection is resolved at runtime so the same codebase runs on development laptops and GPU servers without code changes.
+
+```python
+def setup_device(config: Config) -> str:
+    if config.training.device == "auto":
+        if torch.cuda.is_available():            return "cuda"
+        elif torch.backends.mps.is_available():  return "mps"   # Apple Silicon
+        else:                                    return "cpu"
+    return config.training.device
+```
+
+---
+
+## API Reference
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/auth/login` | POST | — | Issue JWT token |
+| `/train` | POST | JWT | Submit a fine-tuning job |
+| `/task/{id}` | GET | JWT | Poll task status |
+| `/experiments` | GET | JWT | List all MLflow experiments |
+| `/experiments/mlflow/{run_id}` | GET | JWT | Fetch run details |
+| `/models/search` | GET | JWT | Search model registry |
+| `/models/recommend` | POST | JWT | Semantic model recommendation |
+| `/models/transition` | POST | Admin | Promote/demote model stage |
+| `/audit` | GET | Admin | Query audit log |
+| `/metrics` | GET | — | Prometheus metrics endpoint |
+
+---
+
+## Project Structure
+
+```
+app/
+├── api/routes/         # FastAPI route handlers
+│   ├── auth.py         # Login / token issuance
+│   ├── train.py        # Job submission
+│   ├── task.py         # Status polling
+│   ├── experiments.py  # MLflow experiment queries
+│   ├── models.py       # Model search & recommendation
+│   └── audit.py        # Audit log access
+│
+├── auth/               # JWT utilities, RBAC helpers
+├── core/               # Config (Pydantic), MLflow init, logging
+│
+├── tasks/              # Celery task definitions
+│   └── training.py     # train_lora task with retry logic
+│
+├── train/              # Training pipeline
+│   ├── runner.py       # Orchestrates: data → LoRA → train → eval → registry
+│   ├── preprocess.py   # Tokenization
+│   └── evaluator.py    # Metrics computation + progress callback
+│
+├── models/
+│   └── model_registry.py   # ModelCard schema + search/recommend logic
+│
+├── monitor/
+│   ├── exporter.py         # Prometheus metrics
+│   ├── audit_utils.py      # Middleware + SQLite audit log
+│   └── system_metrics.py   # CPU/memory polling
+│
+├── data/
+│   ├── validation.py       # Input data validation rules
+│   ├── analysis.py         # Dataset statistics
+│   └── versioning.py       # Dataset version tracking
+│
+└── tools/
+    ├── checkpoint_manager.py
+    ├── artifact_utils.py
+    └── analyze_metrics.py
+```
+
+---
+
+## Deployment
+
+### Local Development (Docker Compose)
 
 ```bash
-helm install finetune-platform ./charts/finetune-platform -f ./charts/finetune-platform/values.yaml
+cp .env.example .env
+docker compose up -d
 ```
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| FastAPI | 8000 | REST API |
+| Streamlit UI | 8501 | Web interface |
+| MLflow | 5001 | Experiment tracking UI |
+| Prometheus | 9090 | Metrics scraping |
+| Grafana | 3000 | Dashboards |
+| Redis | 6379 | Broker + result backend |
+
+### Kubernetes (Helm)
+
+```bash
+# Development
+helm install finetune charts/finetune-platform -f charts/finetune-platform/values.yaml
+
+# Production
+helm upgrade finetune charts/finetune-platform \
+  -f charts/finetune-platform/values.yaml \
+  -f charts/finetune-platform/values.prod.yaml
+```
+
+### CI/CD (GitHub Actions)
+
+| Trigger | Pipeline |
+|---------|----------|
+| Any PR / push | Lint (flake8) + Unit tests |
+| Push to `main` | Lint + Tests + Helm dry-run |
+| Tag `day-*` | Docker build + push to DockerHub |
 
 ---
 
-## 參考資料
+## 30-Day Evolution
 
-* **實戰筆記**：[打造 AI 微調平台：從系統設計到 AI 協作的 30 天實戰筆記](https://ithelp.ithome.com.tw/users/20151660/ironman/8264)
-* **開發工具**：ChatGPT-4o, Cursor, GitHub Actions, Helm
+| Period | Focus | Key Deliverables |
+|--------|-------|-----------------|
+| Week 1 | Task & data pipeline | FastAPI + Celery architecture, data validation |
+| Week 2 | Experiment reproducibility | MLflow tracking, Config YAML management |
+| Week 3 | Model reuse & governance | Model Registry, recommendation API, RBAC |
+| Week 4 | Deployment & monitoring | CI/CD, Helm, Prometheus + Grafana |
+| Week 5 | Multi-tenancy & wrap-up | Namespace + Quota, load testing, Demo Day |
+
+---
+
+## Running Tests
+
+```bash
+pytest
+pytest --cov=app tests/
+pytest tests/test_api.py -v
+```
+
+Test coverage: API endpoints, authentication, error handling, Celery task logic, monitoring metrics.
+
+---
+
+## Key Engineering Trade-offs
+
+**SQLite for audit log** — zero-ops, sufficient for single-node requirements. Would migrate to PostgreSQL for multi-node deployments.
+
+**Celery `-P solo` in Docker Compose** — simplifies local development; production Helm chart configures proper worker concurrency.
+
+**MLflow with SQLite backend** — adequate for development and small teams. `values.prod.yaml` is designed to point at an external database.
+
+**Pydantic v2 for config validation** — strict typing catches config errors before any GPU time is spent.
