@@ -1,6 +1,6 @@
 # Finetune Platform — Production-Grade LoRA Training & MLOps System
 
-A **full-lifecycle MLOps platform** for LoRA fine-tuning of transformer models — built by one developer in 30 days, using AI as a force multiplier.
+A **full-lifecycle MLOps platform** for LoRA fine-tuning of transformer models — designed, implemented, and shipped solo in 30 days.
 
 The system covers the complete pipeline: **Data → Training → Deployment → Observation**, with production engineering baked in from the start: async task isolation, experiment governance, RBAC security, and end-to-end observability.
 
@@ -23,24 +23,22 @@ The answer to that last question is what makes this project different.
 
 ---
 
-## Built with AI Collaboration
+## Development Approach
 
-This platform was built through deep human-AI collaboration. Roughly **80% of core code and configuration was co-generated with ChatGPT-4o and Cursor** — not as a shortcut, but as a deliberate engineering methodology.
+Built solo over 30 days with AI pair programming (ChatGPT-4o + Cursor) used to accelerate prototyping and reduce boilerplate. Core architecture, module boundaries, and the test suite were designed and written by hand — AI sped up exploration, but the load-bearing engineering decisions are mine.
 
 | Tool | Role |
 |------|------|
-| ChatGPT-4o | Architecture planning, design tradeoff discussions, documentation |
+| ChatGPT-4o | Brainstorming design tradeoffs, drafting documentation |
 | Cursor | In-editor pair programming, refactoring, rapid iteration |
 
-**The result:** a solo developer was able to architect, implement, and ship a system that would typically require a small backend team — in 30 days.
+**What this looked like in practice:**
 
-**What AI collaboration actually looks like in practice:**
+AI is fast at generating plausible-looking code, but production systems demand more. Generated code routinely required debugging, logic correction, and integration testing before it was usable. As the codebase grew, clear module boundaries and thorough test coverage became the difference between forward progress and constant rework.
 
-AI is fast at generating plausible-looking code, but production systems demand more. Even when generated code passed syntax checks, it still required debugging, logic correction, and integration testing to actually work. As module count grew, early AI-generated code often lacked generality — test coverage and clear module boundaries became critical to keep things from collapsing under their own weight.
+The approach that worked: **write tests first, then layer on features.** AI accelerated exploration; disciplined testing and debugging made the system land.
 
-The approach that worked: **test first, then stack features.** AI accelerated the pace of exploration and seeing the right direction; real debugging and tests made the product land.
-
-> Architecture decisions, prompt strategies, and human-AI tuning notes are documented in full in the [Ironman series](https://ithelp.ithome.com.tw/users/20151660/ironman/8264).
+> Architecture decisions, prompt strategies, and engineering notes are documented in full in the [Ironman series](https://ithelp.ithome.com.tw/users/20151660/ironman/8264).
 
 ---
 
