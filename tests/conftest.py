@@ -495,8 +495,14 @@ def mock_celery(monkeypatch):
         else:
             return create_task_result(task_id)
 
+    # train.py 現在透過 create_training_job 提交任務，直接 mock 該函式
+    def mock_create_training_job(config, request=None, **kwargs):
+        return mock_delay(config=config)
+
     # 設置所有的 mock - 使用 try/except 避免模組導入問題
-    monkeypatch.setattr("app.api.routes.train.train_lora_task", mock_train_lora)
+    monkeypatch.setattr(
+        "app.api.routes.train.create_training_job", mock_create_training_job
+    )
     monkeypatch.setattr("app.api.routes.task.AsyncResult", mock_async_result_class)
     monkeypatch.setattr("celery.result.AsyncResult", mock_async_result_class)
 

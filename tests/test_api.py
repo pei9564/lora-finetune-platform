@@ -251,14 +251,14 @@ class TestAPI:
             def failed(self):
                 return self.status == "FAILURE"
 
-        # 直接 patch train endpoint 中使用的 train_lora_task 和 AsyncResult
+        # 直接 patch train endpoint 中使用的 create_training_job 和 AsyncResult
         with (
-            patch("app.api.routes.train.train_lora_task") as mock_task,
+            patch("app.api.routes.train.create_training_job") as mock_task,
             patch("app.api.routes.task.AsyncResult", side_effect=MockAsyncResult),
         ):
             # 模擬空數據集錯誤
             error_task = MockTask("error-task-123")
-            mock_task.delay.return_value = error_task
+            mock_task.return_value = error_task
 
             config_dict = test_config.model_dump()
             config_dict["experiment_name"] = "error_test"
@@ -275,7 +275,7 @@ class TestAPI:
 
             # 模擬記憶體不足錯誤
             oom_task = MockTask("oom-task-456")
-            mock_task.delay.return_value = oom_task
+            mock_task.return_value = oom_task
 
             config_dict = test_config.model_dump()
             config_dict["experiment_name"] = "oom_test"
