@@ -205,7 +205,7 @@ docker-push:
 	docker push $(IMAGE)
 
 helm-dryrun:
-	@helm upgrade --install $(HELM_RELEASE) $(HELM_CHART) $(HELM_COMMON_FLAGS) --dry-run=client --debug
+	@helm template $(HELM_RELEASE) $(HELM_CHART) -f $(HELM_VALUES) -f $(HELM_PROD_VALUES) --namespace $(HELM_NAMESPACE) --debug
 
 helm-deploy:
 	@helm upgrade --install $(HELM_RELEASE) $(HELM_CHART) $(HELM_COMMON_FLAGS)
