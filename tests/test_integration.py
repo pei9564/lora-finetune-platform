@@ -20,13 +20,9 @@ from app.main import app
 
 
 @pytest.fixture
-def test_db():
-    """提供測試用資料庫連線"""
-    # 確保資料庫目錄存在
-    os.makedirs("results", exist_ok=True)
-
-    # 連接資料庫
-    conn = sqlite3.connect("results/experiments.db")
+def test_db(tmp_path):
+    """提供每個測試獨立的 SQLite 資料庫連線。"""
+    conn = sqlite3.connect(tmp_path / "experiments.db")
 
     # 建立測試表
     conn.execute("""
@@ -51,12 +47,10 @@ def test_db():
     """)
     conn.commit()
 
-    yield conn
-
-    # 清理測試資料
-    conn.execute("DELETE FROM experiments")
-    conn.commit()
-    conn.close()
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 @pytest.fixture
