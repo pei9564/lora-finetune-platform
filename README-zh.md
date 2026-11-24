@@ -17,7 +17,7 @@ mkdir -p logs
 docker compose -f docker-compose.yml -f docs/compose.local.yml up -d --build ui worker
 ```
 
-1. 開啟 [Streamlit](http://localhost:8501)，按 **訪客登入**。
+1. 開啟 [Streamlit](http://localhost:8501)，在側欄選擇 **繁體中文**，再按 **訪客登入**。
 2. 在 **提交任務** 選擇 `distilbert-base-uncased` 和 `glue/sst2`。小型 CPU 驗證可以用 100 筆訓練樣本、50 筆驗證樣本、batch size 2、1 epoch，裝置沿用 CPU 映像的預設值。
 3. 在 **追蹤進度** 使用自動帶入的 ID 或貼上任務 ID，查看訓練指標與發布狀態。開啟 [MLflow](http://localhost:5001) 可以查看實驗和已註冊的模型。
 
@@ -34,8 +34,9 @@ flowchart TB
     User["瀏覽器"] --> UI["Streamlit"]
     UI -->|"提交及查詢任務"| API["FastAPI"]
     API -->|"排隊及查詢"| Redis["Redis 任務佇列與結果後端"]
-    Redis <-->|"任務及結果"| Worker["Celery worker<br/>Transformers + PEFT"]
-    Worker -->|"保存 adapter 與發布狀態"| Results[("共享成果儲存")]
+    Redis -->|"訓練任務"| Worker["Celery 訓練程序（Transformers + PEFT）"]
+    Worker -->|"任務結果"| Redis
+    Worker -->|"保存 adapter 與發布狀態"| Results[(共享成果儲存)]
     Worker -->|"實驗指標及模型發布"| MLflow["MLflow Tracking + Registry"]
     API -->|"讀取既有成果以重試"| Results
     API -->|"查詢及重試"| MLflow

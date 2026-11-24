@@ -14,6 +14,30 @@ import streamlit as st
 import yaml
 
 from app.core.settings import API_URL
+from app.ui_messages import message
+
+
+LANGUAGES = {"zh-TW": "繁體中文", "en": "English"}
+STATUS_MESSAGES = {
+    "PENDING": "pending",
+    "STARTED": "running",
+    "RUNNING": "running",
+    "SUCCESS": "finished",
+    "FINISHED": "finished",
+    "FAILURE": "failed",
+    "FAILED": "failed",
+    "SCHEDULED": "scheduled",
+    "ALL": "all",
+}
+
+
+def tr(key: str, *values) -> str:
+    return message(st.session_state.get("ui_language", "zh-TW"), key, *values)
+
+
+def status_label(status: str) -> str:
+    key = STATUS_MESSAGES.get(status)
+    return tr(key) if key else status
 
 
 def load_default_config() -> Dict:
@@ -26,7 +50,7 @@ def load_default_config() -> Dict:
         with open("config/default.yaml", "r", encoding="utf-8") as f:
             return yaml.safe_load(f)
     except Exception as e:
-        st.error(f"載入預設配置失敗：{e}")
+        st.error(tr("config_error", e))
         return {}
 
 
@@ -41,7 +65,7 @@ def login(username: str, password: str) -> Optional[Dict]:
         Dict: 包含 token 和用戶資訊的字典，如果登入失敗則返回 None
     """
     try:
-        with st.spinner("登入中..."):  # 添加載入指示器
+        with st.spinner(tr("signing_in")):  # 添加載入指示器
             # 使用 API_URL 環境變數（在 Docker 中設置為 http://api:8000）
             response = requests.post(
                 f"{API_URL}/auth/login",
@@ -57,20 +81,20 @@ def login(username: str, password: str) -> Optional[Dict]:
                 "user_id": data["user_id"],
             }
         elif response.status_code == 401:
-            st.error("登入失敗：帳號或密碼錯誤")
+            st.error(tr("invalid_credentials"))
             return None
         else:
-            st.error(f"登入失敗：伺服器錯誤 (狀態碼: {response.status_code})")
+            st.error(tr("login_server_error", response.status_code))
             return None
 
     except requests.exceptions.Timeout:
-        st.error("登入超時：伺服器回應時間過長，請稍後再試")
+        st.error(tr("login_timeout"))
         return None
     except requests.exceptions.ConnectionError as e:
-        st.error(f"連接失敗：無法連接到伺服器 ({str(e)})")
+        st.error(tr("connection_error", str(e)))
         return None
     except Exception as e:
-        st.error(f"登入失敗：{str(e)}")
+        st.error(tr("login_error", str(e)))
         return None
 
 
@@ -87,14 +111,14 @@ def get_task_status(task_id: str) -> Optional[Dict]:
         # 從 session state 獲取 token
         token = st.session_state.get("jwt_token")
         if not token:
-            st.error("請先登入")
+            st.error(tr("sign_in_required"))
             return None
 
         headers = {"Authorization": f"Bearer {token}"}
         response = requests.get(f"{API_URL}/task/{task_id}", headers=headers)
         return response.json()
     except Exception as e:
-        st.error(f"查詢失敗：{e}")
+        st.error(tr("query_error", e))
         return None
 
 
@@ -105,7 +129,7 @@ def render_stepper(status: str):
         status: 任務狀態
     """
     # 定義所有步驟
-    steps = ["PENDING", "STARTED", "SUCCESS/FAILURE"]
+    steps = [tr("pending"), tr("running"), tr("complete_or_failed")]
     current_step = 0
 
     # 根據狀態確定當前步驟
@@ -155,20 +179,20 @@ def check_auth() -> bool:
         bool: 是否已登入
     """
     if "jwt_token" not in st.session_state:
-        st.warning("請先登入")
+        st.warning(tr("sign_in_required"))
 
         # 使用表單進行登入
         with st.form("login_form", clear_on_submit=True):
-            username = st.text_input("使用者名稱", key="login_username")
-            password = st.text_input("密碼", type="password", key="login_password")
+            username = st.text_input(tr("username"), key="login_username")
+            password = st.text_input(tr("password"), type="password", key="login_password")
 
             # 使用 columns 來對齊按鈕
             btn_col1, btn_col2 = st.columns(2)
             with btn_col1:
-                submitted = st.form_submit_button("登入", use_container_width=True)
+                submitted = st.form_submit_button(tr("sign_in"), use_container_width=True)
             with btn_col2:
                 guest_login = st.form_submit_button(
-                    "訪客登入", use_container_width=True
+                    tr("guest_sign_in"), use_container_width=True
                 )
 
             if submitted or guest_login:
@@ -177,7 +201,7 @@ def check_auth() -> bool:
                     username = "guest"
                     password = "guest123"
                 elif not username or not password:
-                    st.error("請輸入使用者名稱和密碼")
+                    st.error(tr("credentials_required"))
                     return False
 
                 auth_data = login(username, password)
@@ -186,7 +210,7 @@ def check_auth() -> bool:
                     st.session_state.user_role = auth_data["role"]
                     st.session_state.user_id = auth_data["user_id"]
                     st.success(
-                        f"登入成功！歡迎 {auth_data['user_id']} ({auth_data['role']})"
+                        tr("login_success", auth_data['user_id'], auth_data['role'])
                     )
                     st.rerun()
                     return True
@@ -272,18 +296,18 @@ def submit_training_task(
         if response.status_code == 422:
             for error in response.json()["detail"]:
                 field = ".".join(map(str, error["loc"][1:]))
-                st.error(f"{field}：{error['msg']}")
+                st.error(tr("field_error", field, error["msg"]))
             return None
         response.raise_for_status()
         return response.json().get("task_id")
     except Exception as e:
-        st.error(f"提交任務失敗：{e}")
+        st.error(tr("submission_error", e))
         return None
 
 
 def render_task_form():
     """渲染任務提交表單"""
-    st.markdown("### 提交訓練任務")
+    st.markdown(tr("submit_heading"))
 
     # 載入預設配置
     default_config = load_default_config()
@@ -291,51 +315,56 @@ def render_task_form():
     # 創建表單
     with st.form("training_form"):
         # 實驗設置
-        st.markdown("#### 實驗設置")
+        st.markdown(tr("experiment_heading"))
         experiment_name = st.text_input(
-            "實驗名稱",
+            tr("experiment_name"),
             value=default_config.get("experiment_name", "default_experiment"),
-            help="為這次實驗取一個有意義的名稱",
+            help=tr("experiment_name_help"),
+            key="training_experiment_name",
         )
 
         # 模型設置
-        st.markdown("#### 模型設置")
+        st.markdown(tr("model_heading"))
         model_name = st.selectbox(
-            "預訓練模型",
+            tr("base_model"),
             options=["distilbert-base-uncased", "bert-base-uncased", "roberta-base"],
             index=0,
-            help="選擇要微調的基礎模型",
+            help=tr("base_model_help"),
+            key="training_model_name",
         )
 
         # 資料設置
-        st.markdown("#### 資料設置")
+        st.markdown(tr("data_heading"))
         col1, col2 = st.columns(2)
         with col1:
             dataset = st.selectbox(
-                "資料集",
+                tr("dataset"),
                 options=["glue/sst2", "glue/cola", "imdb"],
                 index=0,
-                help="選擇訓練資料集（格式：dataset_name/config 或 dataset_name）",
+                help=tr("dataset_help"),
+                key="training_dataset",
             )
             train_samples = st.number_input(
-                "訓練樣本數",
+                tr("training_samples"),
                 value=int(default_config.get("data", {}).get("train_samples", 500)),
                 min_value=100,
                 max_value=10000,
                 step=100,
-                help="使用多少樣本進行訓練",
+                help=tr("training_samples_help"),
+                key="training_train_samples",
             )
         with col2:
             eval_samples = st.number_input(
-                "驗證樣本數",
+                tr("evaluation_samples"),
                 value=int(default_config.get("data", {}).get("eval_samples", 100)),
                 min_value=50,
                 max_value=2000,
                 step=50,
-                help="使用多少樣本進行驗證",
+                help=tr("evaluation_samples_help"),
+                key="training_eval_samples",
             )
             batch_size = st.number_input(
-                "批次大小",
+                tr("batch_size"),
                 value=int(
                     default_config.get("training", {}).get(
                         "per_device_train_batch_size", 2
@@ -343,27 +372,30 @@ def render_task_form():
                 ),
                 min_value=1,
                 max_value=32,
-                help="每批處理的樣本數量",
+                help=tr("batch_size_help"),
+                key="training_batch_size",
             )
 
         # LoRA 設置
-        st.markdown("#### LoRA 設置")
+        st.markdown(tr("lora_heading"))
         col3, col4 = st.columns(2)
         with col3:
             lora_r = st.number_input(
-                "LoRA 秩 (r)",
+                tr("lora_rank"),
                 value=int(default_config.get("lora", {}).get("r", 8)),
                 min_value=1,
                 max_value=64,
-                help="LoRA 矩陣的秩，越大效果越好但參數更多",
+                help=tr("lora_rank_help"),
+                key="training_lora_r",
             )
             learning_rate = st.number_input(
-                "學習率",
+                tr("learning_rate"),
                 value=float(
                     default_config.get("training", {}).get("learning_rate", 5e-4)
                 ),
                 format="%.0e",
-                help="訓練的學習率",
+                help=tr("learning_rate_help"),
+                key="training_learning_rate",
             )
         with col4:
             lora_alpha = st.number_input(
@@ -371,29 +403,32 @@ def render_task_form():
                 value=int(default_config.get("lora", {}).get("lora_alpha", 16)),
                 min_value=1,
                 max_value=128,
-                help="LoRA 的縮放參數",
+                help=tr("lora_alpha_help"),
+                key="training_lora_alpha",
             )
             epochs = st.number_input(
-                "訓練輪數",
+                tr("epochs"),
                 value=int(
                     default_config.get("training", {}).get("num_train_epochs", 1)
                 ),
                 min_value=1,
                 max_value=10,
-                help="完整訓練資料集的次數",
+                help=tr("epochs_help"),
+                key="training_epochs",
             )
 
         # 系統設置
-        st.markdown("#### 系統設置")
+        st.markdown(tr("system_heading"))
         device = st.selectbox(
-            "訓練設備",
+            tr("training_device"),
             options=["auto", "cuda", "mps", "cpu"],
             index=0,
-            help="選擇訓練使用的設備，auto 會自動選擇最佳設備",
+            help=tr("training_device_help"),
+            key="training_device",
         )
 
         # 提交按鈕
-        submitted = st.form_submit_button("提交訓練任務")
+        submitted = st.form_submit_button(tr("submit_training"))
         if submitted:
             # 提交任務
             task_id = submit_training_task(
@@ -411,9 +446,9 @@ def render_task_form():
             )
 
             if task_id:
-                st.success(f"任務提交成功！任務 ID：{task_id}")
+                st.success(tr("submission_success", task_id))
                 # 將任務 ID 存入 session state
-                st.session_state.last_task_id = task_id
+                st.session_state.progress_task_id = task_id
 
 
 def render_experiment_list():
@@ -421,47 +456,50 @@ def render_experiment_list():
     # 標題列與重新整理按鈕並排
     col1, col2 = st.columns([0.9, 0.1])
     with col1:
-        st.markdown("### 實驗記錄")
+        st.markdown(tr("experiments_heading"))
     with col2:
-        if st.button("🔄", help="重新整理資料"):
+        if st.button("🔄", help=tr("refresh")):
             st.rerun()
 
     # 檢查登入狀態
     if "jwt_token" not in st.session_state:
-        st.warning("請先登入後查看實驗記錄")
+        st.warning(tr("sign_in_experiments"))
         return
 
     # 篩選條件
-    with st.expander("篩選條件", expanded=False):
+    with st.expander(tr("filters"), expanded=False):
         col1, col2 = st.columns(2)
         with col1:
-            name_filter = st.text_input("實驗名稱", help="支援模糊搜尋")
+            name_filter = st.text_input(tr("experiment_name"), help=tr("name_filter_help"), key="history_name_filter")
             min_accuracy = st.slider(
-                "最低準確率",
+                tr("minimum_accuracy"),
                 min_value=0.0,
                 max_value=1.0,
                 value=0.0,
                 step=0.05,
-                help="篩選達到特定準確率的實驗",
+                help=tr("minimum_accuracy_help"),
+                key="history_min_accuracy",
             )
         with col2:
             max_runtime = st.number_input(
-                "最長訓練時間（秒）",
+                tr("maximum_runtime"),
                 min_value=0,
                 value=0,
-                help="篩選在特定時間內完成的實驗",
+                help=tr("maximum_runtime_help"),
+                key="history_max_runtime",
             )
             sort_by = st.selectbox(
-                "排序依據",
+                tr("sort_by"),
                 options=["created_at", "name", "train_runtime", "eval_accuracy"],
                 format_func=lambda x: {
-                    "created_at": "創建時間",
-                    "name": "實驗名稱",
-                    "train_runtime": "訓練時間",
-                    "eval_accuracy": "驗證準確率",
+                    "created_at": tr("created_at"),
+                    "name": tr("experiment_name"),
+                    "train_runtime": tr("training_time"),
+                    "eval_accuracy": tr("evaluation_accuracy"),
                 }[x],
+                key="history_sort_by",
             )
-        desc = st.checkbox("降序排序", value=True)
+        desc = st.checkbox(tr("descending"), value=True, key="history_desc")
 
     # 發送請求
     headers = {"Authorization": f"Bearer {st.session_state.jwt_token}"}
@@ -477,24 +515,24 @@ def render_experiment_list():
         if stats.get("total_experiments", 0) > 0:
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("總實驗數", stats["total_experiments"])
+                st.metric(tr("total_experiments"), stats["total_experiments"])
             with col2:
-                st.metric("平均準確率", f"{stats.get('avg_accuracy', 0):.2%}")
+                st.metric(tr("average_accuracy"), f"{stats.get('avg_accuracy', 0):.2%}")
             with col3:
-                st.metric("最佳準確率", f"{stats.get('best_accuracy', 0):.2%}")
+                st.metric(tr("best_accuracy"), f"{stats.get('best_accuracy', 0):.2%}")
             with col4:
-                st.metric("最短訓練時間", f"{stats.get('min_runtime', 0):.1f}s")
+                st.metric(tr("shortest_runtime"), f"{stats.get('min_runtime', 0):.1f}s")
         else:
-            st.info("📊 目前還沒有任何實驗記錄")
+            st.info(tr("no_experiments"))
             st.markdown("---")
-            st.markdown("💡 **開始使用：**")
-            st.markdown("1. 點擊「提交任務」頁籤")
-            st.markdown("2. 設置訓練參數")
-            st.markdown("3. 提交訓練任務")
+            st.markdown(tr("getting_started"))
+            st.markdown(tr("open_submit"))
+            st.markdown(tr("configure_training"))
+            st.markdown(tr("start_training"))
             return
 
     except Exception:
-        st.warning("無法獲取統計資訊，但仍然嘗試載入實驗列表...")
+        st.warning(tr("stats_unavailable"))
 
         # 獲取實驗列表
         params = {
@@ -516,18 +554,18 @@ def render_experiment_list():
 
         # 顯示實驗列表
         if experiments:
-            st.markdown("#### 實驗列表")
+            st.markdown(tr("experiments_list"))
             # 創建實驗表格
             data = []
             for exp in experiments:
                 data.append(
                     {
-                        "實驗名稱": exp["name"],
-                        "創建時間": datetime.fromisoformat(exp["created_at"]).strftime(
+                        tr("experiment_name"): exp["name"],
+                        tr("created_at"): datetime.fromisoformat(exp["created_at"]).strftime(
                             "%Y-%m-%d %H:%M"
                         ),
-                        "訓練時間": f"{exp['train_runtime']:.1f}s",
-                        "準確率": f"{exp['eval_accuracy']:.2%}",
+                        tr("training_time"): f"{exp['train_runtime']:.1f}s",
+                        tr("accuracy"): f"{exp['eval_accuracy']:.2%}",
                         "ID": exp["id"],
                     }
                 )
@@ -538,7 +576,7 @@ def render_experiment_list():
                 column_config={
                     "ID": st.column_config.TextColumn(
                         "ID",
-                        help="實驗唯一識別碼",
+                        help=tr("experiment_id_help"),
                         width="medium",
                     ),
                 },
@@ -547,41 +585,37 @@ def render_experiment_list():
             )
         else:
             if name_filter or min_accuracy > 0 or max_runtime > 0:
-                st.info("沒有找到符合篩選條件的實驗")
+                st.info(tr("no_matching_experiments"))
             else:
-                st.info("📊 目前還沒有任何實驗記錄")
+                st.info(tr("no_experiments"))
                 st.markdown("---")
-                st.markdown("💡 **開始使用：**")
-                st.markdown("1. 點擊「提交任務」頁籤")
-                st.markdown("2. 設置訓練參數")
-                st.markdown("3. 提交訓練任務")
+                st.markdown(tr("getting_started"))
+                st.markdown(tr("open_submit"))
+                st.markdown(tr("configure_training"))
+                st.markdown(tr("start_training"))
 
     except requests.exceptions.Timeout:
-        st.error("載入實驗記錄超時，請稍後再試")
+        st.error(tr("experiments_timeout"))
     except requests.exceptions.ConnectionError:
-        st.error("無法連接到伺服器，請確認服務是否正常運行")
+        st.error(tr("server_unreachable"))
     except Exception as e:
-        st.error(f"載入實驗記錄時發生錯誤：{str(e)}")
+        st.error(tr("experiments_error", str(e)))
         st.markdown("---")
-        st.markdown("💡 **可能的解決方案：**")
-        st.markdown("1. 重新整理頁面")
-        st.markdown("2. 檢查網路連接")
-        st.markdown("3. 確認服務是否正常運行")
+        st.markdown(tr("troubleshooting"))
+        st.markdown(tr("refresh_page"))
+        st.markdown(tr("check_connection"))
+        st.markdown(tr("check_service"))
 
 
 def render_task_progress():
     """渲染任務進度"""
     # 檢查登入狀態
     if "jwt_token" not in st.session_state:
-        st.warning("請先登入後查看任務進度")
+        st.warning(tr("sign_in_progress"))
         return
 
-    # 如果有最新提交的任務 ID，自動填入
-    default_task_id = st.session_state.get("last_task_id", "")
-
-    # 輸入任務 ID
-    task_id = st.text_input("請輸入任務 ID", value=default_task_id)
-    check_status = st.button("查詢狀態")
+    task_id = st.text_input(tr("task_id"), key="progress_task_id")
+    check_status = st.button(tr("check_status"))
 
     # 如果有輸入 ID 且點擊查詢
     if task_id and check_status:
@@ -592,49 +626,49 @@ def render_task_progress():
                 # 查詢狀態
                 result = get_task_status(task_id)
                 if not result:
-                    st.error("無法獲取任務狀態，請確認任務 ID 是否正確")
+                    st.error(tr("task_unavailable"))
                     break
 
                 # 清空佔位元件並顯示新狀態
-                with status_placeholder:
+                with status_placeholder.container():
                     st.markdown("---")
 
                     # 安全地獲取狀態
                     status = result.get("status")
                     if not status:
-                        st.error("任務狀態資訊不完整")
+                        st.error(tr("missing_task_status"))
                         break
 
-                    st.markdown(f"**任務狀態**：{status}")
+                    st.markdown(tr("task_status", status_label(status)))
                     render_stepper(status)
 
                     # 如果有結果，顯示
                     if "result" in result:
                         st.markdown("---")
-                        st.markdown("**訓練結果**：")
+                        st.markdown(tr("training_result"))
                         st.json(result["result"])
                     # 如果有錯誤，顯示
                     elif "error" in result:
                         st.markdown("---")
-                        st.error(f"錯誤信息：{result.get('error', '未知錯誤')}")
+                        st.error(tr("task_error", result.get('error', tr("unknown_error"))))
 
                     # 根據狀態顯示不同的提示
                     if status == "PENDING":
-                        st.info("⏳ 任務正在等待執行...")
+                        st.info(tr("task_pending"))
                     elif status == "STARTED":
-                        st.info("🚀 任務正在執行中...")
+                        st.info(tr("task_running"))
                     elif status == "SUCCESS":
                         publication = result.get("result", {}).get("publication", {})
                         if publication.get("status") in ("failed", "pending"):
-                            st.warning("訓練已完成，模型尚未發布。")
+                            st.warning(tr("publication_pending"))
                             st.session_state["retry_publication_task"] = task_id
                         else:
-                            st.success("✅ 任務已完成！")
+                            st.success(tr("task_complete"))
                             st.session_state.pop("retry_publication_task", None)
                     elif status == "FAILURE":
-                        st.error("❌ 任務執行失敗")
+                        st.error(tr("task_failed"))
                     else:
-                        st.warning(f"⚠️ 未知狀態：{status}")
+                        st.warning(tr("unknown_status", status))
 
                 # 如果任務完成或失敗，停止輪詢
                 if status in ["SUCCESS", "FAILURE"]:
@@ -644,15 +678,15 @@ def render_task_progress():
                 time.sleep(2)
 
         except Exception as e:
-            st.error(f"查詢任務狀態時發生錯誤：{str(e)}")
+            st.error(tr("task_query_error", str(e)))
             st.markdown("---")
-            st.markdown("💡 **可能的解決方案：**")
-            st.markdown("1. 確認任務 ID 是否正確")
-            st.markdown("2. 檢查網路連接")
-            st.markdown("3. 稍後再試")
+            st.markdown(tr("troubleshooting"))
+            st.markdown(tr("check_task_id"))
+            st.markdown(tr("check_connection"))
+            st.markdown(tr("retry_later"))
 
     if task_id and st.session_state.get("retry_publication_task") == task_id:
-        if st.button("重試模型發布"):
+        if st.button(tr("retry_publication")):
             try:
                 response = requests.post(
                     f"{API_URL}/task/{task_id}/publication/retry",
@@ -662,24 +696,30 @@ def render_task_progress():
                 response.raise_for_status()
                 publication = response.json()
                 if publication["status"] == "published":
-                    st.success(f"模型發布成功，版本 {publication['version']}。")
+                    st.success(tr("publication_success", publication['version']))
                     st.session_state.pop("retry_publication_task", None)
                 else:
-                    st.error(publication["error"])
+                    st.error(tr("publication_error", publication["error"]))
             except requests.RequestException as exc:
-                st.error(f"無法重試模型發布：{exc}")
+                st.error(tr("publication_error", exc))
 
 
 def main():
     """主函數"""
-    st.title("LoRA 訓練任務管理")
+    st.sidebar.selectbox(
+        "Language / 介面語言",
+        options=list(LANGUAGES),
+        format_func=LANGUAGES.__getitem__,
+        key="ui_language",
+    )
+    st.title(tr("app_title"))
 
     # 檢查登入狀態
     if not check_auth():
         return
 
     # 添加頁籤
-    tab1, tab2, tab3 = st.tabs(["提交任務", "追蹤進度", "實驗記錄"])
+    tab1, tab2, tab3 = st.tabs([tr("submit_tab"), tr("progress_tab"), tr("experiments_tab")])
 
     # 提交任務頁籤
     with tab1:
@@ -696,11 +736,11 @@ def main():
 
 def render_mlflow_experiments():
     """渲染實驗記錄頁面"""
-    st.title("📊 實驗記錄")
+    st.title(tr("mlflow_heading"))
 
     # 檢查登入狀態
     if "jwt_token" not in st.session_state:
-        st.warning("請先登入後再查看實驗資料")
+        st.warning(tr("sign_in_mlflow"))
         return
 
     # API endpoints
@@ -753,11 +793,16 @@ def render_mlflow_experiments():
             return f"{duration / 3600:.1f}h"
 
     # Sidebar filters
-    st.sidebar.title("篩選器")
+    st.sidebar.title(tr("sidebar_filters"))
+    run_statuses = ["FINISHED", "RUNNING", "FAILED", "SCHEDULED", "ALL"]
+    status_labels = {status: status_label(status) for status in run_statuses}
     status_filter = st.sidebar.selectbox(
-        "Run 狀態", ["FINISHED", "RUNNING", "FAILED", "SCHEDULED", "ALL"], index=0
+        tr("run_status"),
+        run_statuses,
+        format_func=status_labels.__getitem__,
+        key="mlflow_status_filter",
     )
-    limit = st.sidebar.number_input("Run 數量", min_value=1, max_value=100, value=10)
+    limit = st.sidebar.number_input(tr("run_limit"), min_value=1, max_value=100, value=10, key="mlflow_limit")
 
     # Fetch experiment runs
     try:
@@ -782,42 +827,42 @@ def render_mlflow_experiments():
             # 移除調試信息顯示
 
             if not data.get("runs") or len(data["runs"]) == 0:
-                st.info("📊 目前沒有找到任何 MLflow 實驗 runs。")
+                st.info(tr("no_mlflow_runs"))
                 st.markdown("---")
-                st.markdown("💡 **提示：**")
-                st.markdown("- 請先執行一些訓練任務來產生實驗資料")
-                st.markdown("- 確保 MLflow 服務正在運行")
-                st.markdown(f"- 查看 [MLflow UI]({MLFLOW_UI}) 確認實驗資料")
+                st.markdown(tr("tip"))
+                st.markdown(tr("create_runs"))
+                st.markdown(tr("check_mlflow"))
+                st.markdown(tr("open_mlflow", MLFLOW_UI))
                 return
         else:
-            st.warning(f"⚠️ API 回應錯誤 (狀態碼: {response.status_code})")
-            st.info("📊 目前無法獲取 MLflow 實驗資料。")
+            st.warning(tr("mlflow_http_error", response.status_code))
+            st.info(tr("mlflow_unavailable"))
             st.markdown("---")
-            st.markdown("💡 **可能的原因：**")
-            st.markdown("- MLflow 服務可能正在啟動中")
-            st.markdown("- API 服務可能需要重新啟動")
-            st.markdown(f"- 請檢查 [MLflow UI]({MLFLOW_UI}) 是否可訪問")
+            st.markdown(tr("possible_causes"))
+            st.markdown(tr("mlflow_starting"))
+            st.markdown(tr("api_restart_needed"))
+            st.markdown(tr("check_mlflow_ui", MLFLOW_UI))
             return
     except requests.exceptions.ConnectionError:
-        st.error("❌ 無法連接到 API 服務")
-        st.info("📊 目前無法獲取 MLflow 實驗資料。")
+        st.error(tr("api_unreachable"))
+        st.info(tr("mlflow_unavailable"))
         st.markdown("---")
-        st.markdown("💡 **解決方案：**")
-        st.markdown("- 請確認 API 服務正在運行")
-        st.markdown("- 嘗試重新啟動服務: `docker-compose restart api`")
-        st.markdown(f"- 檢查 [MLflow UI]({MLFLOW_UI}) 是否可訪問")
+        st.markdown(tr("solutions"))
+        st.markdown(tr("check_api"))
+        st.markdown(tr("restart_api"))
+        st.markdown(tr("check_mlflow_ui", MLFLOW_UI))
         return
     except requests.exceptions.Timeout:
-        st.warning("⏰ API 請求超時")
-        st.info("📊 目前無法獲取 MLflow 實驗資料。")
+        st.warning(tr("api_timeout"))
+        st.info(tr("mlflow_unavailable"))
         st.markdown("---")
-        st.markdown("💡 **請稍後再試或檢查服務狀態**")
+        st.markdown(tr("retry_or_check"))
         return
     except Exception as e:
-        st.error(f"❌ 發生未預期的錯誤: {str(e)}")
-        st.info("📊 目前無法獲取 MLflow 實驗資料。")
+        st.error(tr("unexpected_error", str(e)))
+        st.info(tr("mlflow_unavailable"))
         st.markdown("---")
-        st.markdown("💡 **請檢查服務日誌或聯繫管理員**")
+        st.markdown(tr("check_logs"))
         return
 
     # 如果成功獲取資料，顯示實驗列表
@@ -828,54 +873,54 @@ def render_mlflow_experiments():
             runs_data.append(
                 {
                     "Run ID": f"[{run.get('run_id', '-')}]({MLFLOW_UI}/#/experiments/{data.get('experiment_id', '1')}/runs/{run.get('run_id', '-')})",
-                    "狀態": run.get("status", "-"),
-                    "開始時間": format_time(run.get("start_time")),
-                    "持續時間": format_duration(
+                    tr("status"): run.get("status", "-"),
+                    tr("started_at"): format_time(run.get("start_time")),
+                    tr("duration"): format_duration(
                         run.get("start_time"), run.get("end_time")
                     ),
-                    "模型": run.get("params", {}).get("model_name", "-"),
-                    "準確率": f"{float(run.get('metrics', {}).get('eval_accuracy') or 0):.4f}",
-                    "訓練時間": f"{float(run.get('metrics', {}).get('training_time') or 0):.1f}s",
-                    "批次大小": run.get("params", {}).get("batch_size", "-"),
-                    "學習率": run.get("params", {}).get("learning_rate", "-"),
+                    tr("model"): run.get("params", {}).get("model_name", "-"),
+                    tr("accuracy"): f"{float(run.get('metrics', {}).get('eval_accuracy') or 0):.4f}",
+                    tr("training_time"): f"{float(run.get('metrics', {}).get('training_time') or 0):.1f}s",
+                    tr("batch_size"): run.get("params", {}).get("batch_size", "-"),
+                    tr("learning_rate"): run.get("params", {}).get("learning_rate", "-"),
                 }
             )
 
         df = pd.DataFrame(runs_data)
 
         # Display metrics summary
-        st.subheader("📈 最近實驗")
+        st.subheader(tr("recent_runs"))
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            avg_acc = pd.to_numeric(df["準確率"], errors="coerce").mean()
-            st.metric("平均準確率", f"{avg_acc:.4f}")
+            avg_acc = pd.to_numeric(df[tr("accuracy")], errors="coerce").mean()
+            st.metric(tr("average_accuracy"), f"{avg_acc:.4f}")
 
         with col2:
-            success_rate = (df["狀態"] == "FINISHED").mean() * 100
-            st.metric("成功率", f"{success_rate:.1f}%")
+            success_rate = (df[tr("status")] == "FINISHED").mean() * 100
+            st.metric(tr("success_rate"), f"{success_rate:.1f}%")
 
         with col3:
             total_runs = len(df)
-            st.metric("總 Runs", total_runs)
+            st.metric(tr("total_runs"), total_runs)
 
         # Display runs table
         st.dataframe(
-            df,
+            df.assign(**{tr("status"): df[tr("status")].map(status_label)}),
             column_config={
                 "Run ID": st.column_config.Column(
                     "Run ID",
-                    help="點擊查看 MLflow UI 中的詳細資訊",
+                    help=tr("run_link_help"),
                     width="small",
                 ),
-                "狀態": st.column_config.Column(
-                    "狀態",
-                    help="Run 狀態",
+                tr("status"): st.column_config.Column(
+                    tr("status"),
+                    help=tr("run_status"),
                     width="small",
                 ),
-                "準確率": st.column_config.NumberColumn(
-                    "準確率",
-                    help="評估準確率",
+                tr("accuracy"): st.column_config.NumberColumn(
+                    tr("accuracy"),
+                    help=tr("accuracy_help"),
                     format="%.4f",
                     width="small",
                 ),
@@ -886,8 +931,7 @@ def render_mlflow_experiments():
         # Add MLflow UI link
         st.markdown("---")
         st.markdown(
-            f"💡 **提示：** 點擊 Run ID 可以在 MLflow UI 中查看詳細的指標和 artifacts，"
-            f"或者直接訪問 [MLflow UI]({MLFLOW_UI})"
+            tr("run_details", MLFLOW_UI)
         )
 
 

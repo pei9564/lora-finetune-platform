@@ -17,9 +17,9 @@ mkdir -p logs
 docker compose -f docker-compose.yml -f docs/compose.local.yml up -d --build ui worker
 ```
 
-1. Open [Streamlit](http://localhost:8501) and choose **訪客登入** (guest login).
-2. Open **提交任務** (submit job). Choose `distilbert-base-uncased` and `glue/sst2`. For a small CPU run, use 100 training samples, 50 evaluation samples, batch size 2, 1 epoch, and the default device setting in the CPU image.
-3. Copy the task ID or use the prefilled ID in **追蹤進度** (track progress). The result shows the training metrics and publication status. Open [MLflow](http://localhost:5001) to inspect the run and registered model.
+1. Open [Streamlit](http://localhost:8501) set the sidebar language to **English**, and choose **Sign in as guest**.
+2. Open **Submit job**. Choose `distilbert-base-uncased` and `glue/sst2`. For a small CPU run, use 100 training samples, 50 evaluation samples, batch size 2, 1 epoch, and the default device setting in the CPU image.
+3. Copy the task ID or use the prefilled ID in **Track progress**. The result shows the training metrics and publication status. Open [MLflow](http://localhost:5001) to inspect the run and registered model.
 
 The local overlay builds a CPU-only PyTorch image. The first run may download model weights and datasets. The Compose worker defaults to **1 CPU and 4 GiB RAM**, with no additional swap. The local overlay binds the published ports to loopback and supplies the application log directory. The demo login is intended for local use.
 
@@ -34,8 +34,9 @@ flowchart TB
     User["Browser"] --> UI["Streamlit"]
     UI -->|"Submit and poll"| API["FastAPI"]
     API -->|"Queue and status"| Redis["Redis broker and result backend"]
-    Redis <-->|"Jobs and results"| Worker["Celery worker<br/>Transformers + PEFT"]
-    Worker -->|"Saved adapter and state"| Results[("Shared results storage")]
+    Redis -->|Jobs| Worker["Celery worker (Transformers + PEFT)"]
+    Worker -->|Results| Redis
+    Worker -->|"Saved adapter and state"| Results[(Shared results storage)]
     Worker -->|"Metrics and model publication"| MLflow["MLflow Tracking + Registry"]
     API -->|"Read artifacts for retry"| Results
     API -->|"Query and retry"| MLflow
@@ -45,7 +46,7 @@ flowchart TB
 
 1. FastAPI validates the nested Pydantic configuration and returns a Celery task ID. Redis serves as the broker and result backend.
 2. The worker loads the model and dataset, trains and evaluates the LoRA adapter, then saves the adapter and publication state. MLflow records the run and metrics.
-3. The worker publishes a model version to MLflow. If packaging or registration fails after training, the task result retains the metrics and shows publication as failed. From **追蹤進度**, choose **重試模型發布** to publish from saved output. A retry reuses an existing Registry version found for the same run and model.
+3. The worker publishes a model version to MLflow. If packaging or registration fails after training, the task result retains the metrics and shows publication as failed. From **Track progress**, choose **Retry model publication** to publish from saved output. A retry reuses an existing Registry version found for the same run and model.
 
 The optional [inference service](app/tasks/inference.py) loads a base model and adapter from a local training output via `MODEL_PATH`. It runs separately from the default Compose services.
 
