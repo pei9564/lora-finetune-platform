@@ -3,14 +3,23 @@ services:
   redis:
     ports: !reset []
   worker:
+    image: lora-finetune-cpu:local
+    build:
+      dockerfile: docs/Dockerfile.cpu
     volumes:
       - ./logs:/app/logs
   api:
+    image: lora-finetune-cpu:local
+    build:
+      dockerfile: docs/Dockerfile.cpu
     volumes:
       - ./logs:/app/logs
     ports: !override
       - "127.0.0.1:${API_PORT}:${API_PORT}"
   ui:
+    image: lora-finetune-cpu:local
+    build:
+      dockerfile: docs/Dockerfile.cpu
     ports: !override
       - "127.0.0.1:${UI_PORT}:8501"
   mlflow:

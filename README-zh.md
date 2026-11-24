@@ -18,10 +18,12 @@ docker compose -f docker-compose.yml -f docs/compose.local.yml up -d --build ui 
 ```
 
 1. 開啟 [Streamlit](http://localhost:8501)，按 **訪客登入**。
-2. 在 **提交任務** 選擇 `distilbert-base-uncased` 和 `glue/sst2`。小型 CPU 驗證可以用 100 筆訓練樣本、50 筆驗證樣本、batch size 2、1 epoch，裝置選 CPU。
+2. 在 **提交任務** 選擇 `distilbert-base-uncased` 和 `glue/sst2`。小型 CPU 驗證可以用 100 筆訓練樣本、50 筆驗證樣本、batch size 2、1 epoch，裝置沿用 CPU 映像的預設值。
 3. 在 **追蹤進度** 使用自動帶入的 ID 或貼上任務 ID，查看訓練指標與發布狀態。開啟 [MLflow](http://localhost:5001) 可以查看實驗和已註冊的模型。
 
-第一次訓練可能需要下載模型權重及資料集。Compose 的 worker 預設上限為 **1 核 CPU、4 GiB RAM，無額外 swap**。本機覆寫會將公開連接埠綁定至 loopback，並提供應用程式的日誌目錄。示範登入供本機使用。
+本機覆寫會建置只含 CPU 版 PyTorch 的映像。第一次訓練可能需要下載模型權重及資料集。Compose 的 worker 預設上限為 **1 核 CPU、4 GiB RAM，無額外 swap**。本機覆寫會將公開連接埠綁定至 loopback，並提供應用程式的日誌目錄。示範登入供本機使用。
+
+**Linux x86-64 實測（2026-11-24）。** 在基底與服務映像已有快取的情況下，全新 Compose 專案約 2 分 5 秒完成建置與啟動。範例任務從提交到取得最終結果約 3 分 29 秒，其中訓練器回報 137 秒。此次 worker 記憶體峰值為 1.27 GiB，MLflow 模型版本 1 已就緒。
 
 需要監控時，執行 `docker compose -f docker-compose.yml -f docs/compose.local.yml up -d prometheus grafana`，再開啟 [Grafana](http://localhost:3000)。要停止服務並保留資料，執行 `docker compose -f docker-compose.yml -f docs/compose.local.yml stop`。
 

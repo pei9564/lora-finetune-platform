@@ -18,10 +18,12 @@ docker compose -f docker-compose.yml -f docs/compose.local.yml up -d --build ui 
 ```
 
 1. Open [Streamlit](http://localhost:8501) and choose **訪客登入** (guest login).
-2. Open **提交任務** (submit job). Choose `distilbert-base-uncased` and `glue/sst2`. For a small CPU run, use 100 training samples, 50 evaluation samples, batch size 2, 1 epoch, and the CPU device.
+2. Open **提交任務** (submit job). Choose `distilbert-base-uncased` and `glue/sst2`. For a small CPU run, use 100 training samples, 50 evaluation samples, batch size 2, 1 epoch, and the default device setting in the CPU image.
 3. Copy the task ID or use the prefilled ID in **追蹤進度** (track progress). The result shows the training metrics and publication status. Open [MLflow](http://localhost:5001) to inspect the run and registered model.
 
-The first run may download model weights and datasets. The Compose worker defaults to **1 CPU and 4 GiB RAM**, with no additional swap. The local overlay binds the published ports to loopback and supplies the application log directory. The demo login is intended for local use.
+The local overlay builds a CPU-only PyTorch image. The first run may download model weights and datasets. The Compose worker defaults to **1 CPU and 4 GiB RAM**, with no additional swap. The local overlay binds the published ports to loopback and supplies the application log directory. The demo login is intended for local use.
+
+**Verified on Linux x86-64 (2026-11-24).** A fresh Compose project started in about 2m 5s with base and service images already cached. The sample job took about 3m 29s from submission to the terminal result, including 137s reported by the trainer. The worker peaked at 1.27 GiB for the run, and MLflow reported model version 1 as ready.
 
 To add monitoring, run `docker compose -f docker-compose.yml -f docs/compose.local.yml up -d prometheus grafana` and open [Grafana](http://localhost:3000). To stop the stack and retain its data, run `docker compose -f docker-compose.yml -f docs/compose.local.yml stop`.
 

@@ -1,0 +1,11 @@
+FROM python:3.11-slim
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+WORKDIR /app
+
+COPY requirements.txt .
+RUN uv pip install --system --default-index https://download.pytorch.org/whl/cpu 'torch==2.7.1' && \
+    printf 'torch==2.7.1\ntransformers<5\n' > /tmp/cpu-constraints.txt && \
+    uv pip install --system -r requirements.txt -c /tmp/cpu-constraints.txt
+
+COPY . .
