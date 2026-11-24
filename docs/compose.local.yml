@@ -1,0 +1,26 @@
+# Local quickstart overrides. Paths and variables resolve from the base Compose file.
+services:
+  redis:
+    ports: !reset []
+  worker:
+    volumes:
+      - ./logs:/app/logs
+  api:
+    volumes:
+      - ./logs:/app/logs
+    ports: !override
+      - "127.0.0.1:${API_PORT}:${API_PORT}"
+  ui:
+    ports: !override
+      - "127.0.0.1:${UI_PORT}:8501"
+  mlflow:
+    environment:
+      MLFLOW_SERVER_ALLOWED_HOSTS: "mlflow:5000,localhost:5001,127.0.0.1:5001"
+    ports: !override
+      - "127.0.0.1:5001:5000"
+  prometheus:
+    ports: !override
+      - "127.0.0.1:9090:9090"
+  grafana:
+    ports: !override
+      - "127.0.0.1:3000:3000"
