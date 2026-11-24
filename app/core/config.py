@@ -20,12 +20,12 @@ class ModelConfig(BaseModel):
 class LoRAConfig(BaseModel):
     """LoRA 相關配置"""
 
-    r: int = Field(default=8, description="LoRA 秩")
+    r: int = Field(default=8, gt=0, description="LoRA 秩")
     lora_alpha: int = Field(default=16, description="LoRA alpha 參數")
     target_modules: List[str] = Field(
         default=["q_lin", "v_lin"], description="目標模組列表"
     )
-    lora_dropout: float = Field(default=0.1, description="LoRA dropout 率")
+    lora_dropout: float = Field(default=0.1, ge=0, le=1, description="LoRA dropout 率")
     bias: str = Field(default="none", description="偏差類型")
     task_type: str = Field(default="SEQ_CLS", description="任務類型")
 
@@ -35,9 +35,9 @@ class DataConfig(BaseModel):
 
     dataset_name: str = Field(default="glue", description="資料集名稱")
     dataset_config: str = Field(default="sst2", description="資料集配置")
-    train_samples: int = Field(default=500, description="訓練樣本數")
-    eval_samples: int = Field(default=100, description="驗證樣本數")
-    max_length: int = Field(default=128, description="最大序列長度")
+    train_samples: int = Field(default=500, gt=0, description="訓練樣本數")
+    eval_samples: int = Field(default=100, gt=0, description="驗證樣本數")
+    max_length: int = Field(default=128, gt=0, description="最大序列長度")
     validation_rules: dict = Field(
         default={
             "min_text_length": 5,
@@ -54,11 +54,11 @@ class TrainingConfig(BaseModel):
 
     output_dir: str = Field(default="./results", description="輸出目錄")
     eval_strategy: str = Field(default="epoch", description="評估策略")
-    learning_rate: float = Field(default=5e-4, description="學習率")
+    learning_rate: float = Field(default=5e-4, gt=0, allow_inf_nan=False, description="學習率")
     per_device_train_batch_size: int = Field(
-        default=2, description="每個設備的訓練批次大小"
+        default=2, gt=0, description="每個設備的訓練批次大小"
     )
-    num_train_epochs: int = Field(default=1, description="訓練輪數")
+    num_train_epochs: int = Field(default=1, gt=0, description="訓練輪數")
     logging_steps: int = Field(default=10, description="日誌記錄步數")
     device: Optional[str] = Field(default=None, description="指定訓練設備")
 

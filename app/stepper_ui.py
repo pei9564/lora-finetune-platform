@@ -269,8 +269,13 @@ def submit_training_task(
             json={"config": config},
             headers=headers,
         )
-        result = response.json()
-        return result.get("task_id")
+        if response.status_code == 422:
+            for error in response.json()["detail"]:
+                field = ".".join(map(str, error["loc"][1:]))
+                st.error(f"{field}：{error['msg']}")
+            return None
+        response.raise_for_status()
+        return response.json().get("task_id")
     except Exception as e:
         st.error(f"提交任務失敗：{e}")
         return None

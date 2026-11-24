@@ -2,32 +2,40 @@
 訓練相關路由
 """
 
-from typing import Any, Dict
+from typing import Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.auth.jwt_utils import get_current_user
+from app.core.config import (
+    Config,
+    DataConfig,
+    LoRAConfig,
+    ModelConfig,
+    SystemConfig,
+    TrainingConfig,
+)
 from app.tasks.training import create_training_job
 
 router = APIRouter(tags=["Training"])
 
 
-class TrainingConfig(BaseModel):
-    """完整訓練配置模型"""
+class SubmittedTrainingConfig(Config):
+    """Require the existing API sections while validating their contents."""
 
-    experiment_name: str
-    model: Dict[str, Any]  # 模型配置
-    data: Dict[str, Any]  # 數據配置
-    training: Dict[str, Any]  # 訓練配置
-    lora: Dict[str, Any]  # LoRA 配置
-    system: Dict[str, Any]  # 系統配置
+    experiment_name: str = Field(min_length=1, pattern=r"\S")
+    model: ModelConfig
+    data: DataConfig
+    training: TrainingConfig
+    lora: LoRAConfig
+    system: SystemConfig
 
 
 class TrainingRequest(BaseModel):
     """訓練請求模型"""
 
-    config: TrainingConfig
+    config: SubmittedTrainingConfig
 
 
 @router.post("/train")
@@ -48,10 +56,6 @@ async def start_training(
         HTTPException: 當任務提交失敗時
     """
     try:
-        # 驗證配置
-        if not request.config.experiment_name:
-            raise HTTPException(status_code=400, detail="實驗名稱不能為空")
-
         # 設置用戶 ID 並提交任務
         config_dict = request.config.model_dump()
         config_dict["user_id"] = user["user_id"]

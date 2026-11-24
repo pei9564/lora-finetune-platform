@@ -161,6 +161,45 @@ class TestAPI:
         assert response.status_code == 422
         assert response.json()["detail"] is not None
 
+    @pytest.mark.parametrize(
+        ("section", "field", "value"),
+        [
+            ("training", "per_device_train_batch_size", 0),
+            ("data", "train_samples", -1),
+            ("lora", "r", "invalid"),
+            ("lora", "lora_dropout", 1.5),
+        ],
+    )
+    def test_invalid_nested_config_is_not_queued(
+        self, test_client, test_config, section, field, value
+    ):
+        config = test_config.model_dump()
+        config[section][field] = value
+
+        with patch("app.api.routes.train.create_training_job") as submit:
+            response = test_client.post("/train", json={"config": config})
+
+        assert response.status_code == 422
+        assert ["body", "config", section, field] in [
+            error["loc"] for error in response.json()["detail"]
+        ]
+        submit.assert_not_called()
+
+    def test_default_ui_config_is_queued_for_authenticated_user(self, test_client, mock_auth):
+        from pathlib import Path
+
+        import yaml
+
+        config = yaml.safe_load(Path("config/default.yaml").read_text(encoding="utf-8"))
+        config["user_id"] = "another-user"
+        with patch("app.api.routes.train.create_training_job") as submit:
+            submit.return_value.id = "submitted-task"
+            response = test_client.post("/train", json={"config": config})
+
+        assert response.json() == {"task_id": "submitted-task"}
+        submit.assert_called_once()
+        assert submit.call_args.kwargs["config"]["user_id"] == mock_auth["user_id"]
+
     def test_invalid_task_id(self, test_client, mock_auth):
         """測試無效的任務ID
 
