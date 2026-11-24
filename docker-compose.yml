@@ -14,6 +14,9 @@ services:
       retries: 3
 
   worker:
+    cpus: 1.0
+    mem_limit: 4g
+    memswap_limit: 4g
     build:
       context: .
       dockerfile: Dockerfile
