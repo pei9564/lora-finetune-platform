@@ -61,6 +61,7 @@ flowchart TB
 | `GET /task/{task_id}` | 查詢訓練結果及發布狀態 |
 | `POST /task/{task_id}/publication/retry` | 重試發布已完成的訓練成果 |
 | `GET /mlflow` | 查詢 MLflow 實驗紀錄 |
+| `GET /models/search` | 查詢模型卡片、評估指標、adapter 與設定路徑，以及 MLflow 發布資訊 |
 | `GET /metrics` | 提供 Prometheus 指標 |
 
 ## 開發與部署

@@ -20,7 +20,6 @@ from app.exceptions import (
     TrainingError,
     TrainingTimeoutError,
 )
-from app.models.model_registry import ModelCard, registry
 from app.tasks import celery_app
 from app.train import (
     load_and_process_data,
@@ -30,7 +29,7 @@ from app.train import (
     setup_training,
     train_and_evaluate,
 )
-from app.train.publication import publication_status
+from app.train.publication import model_card_id, publication_status
 from app.monitor.exporter import record_task_failure, record_task_success
 
 # 配置任務錯誤日誌
@@ -147,24 +146,9 @@ def train_lora(config: Dict) -> Dict:
         model = setup_lora(config, model, device)
 
         trainer = setup_training(config, model, train_dataset, eval_dataset, exp_dir)
-        train_result, eval_result, mlflow_run_id = train_and_evaluate(config, trainer)
-
-        # 保存到模型註冊表
-        model_card = ModelCard(
-            id=f"task_{config.experiment_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-            name=config.experiment_name,
-            base_model=config.model.name,
-            language=config.data.language if hasattr(config.data, "language") else "en",
-            task=config.data.task
-            if hasattr(config.data, "task")
-            else "text-classification",
-            description=f"LoRA fine-tuned model on {config.data.dataset_name} dataset",
-            metrics=dict(
-                accuracy=eval_result["eval_accuracy"], loss=eval_result.get("eval_loss")
-            ),
-            tags=[config.data.dataset_name, "lora", config.model.name],
+        train_result, eval_result, mlflow_run_id = train_and_evaluate(
+            config, trainer, config_path=config_path
         )
-        registry.save_model_card(model_card)
 
         duration = perf_counter() - start_time
         record_task_success(duration_seconds=duration)
@@ -179,7 +163,7 @@ def train_lora(config: Dict) -> Dict:
                 "runtime": train_result.metrics["train_runtime"],
             },
             "eval": {"accuracy": eval_result["eval_accuracy"]},
-            "model_id": model_card.id,
+            "model_id": model_card_id(mlflow_run_id),
             "mlflow_run_id": mlflow_run_id,
             "adapter_path": adapter_path,
             "publication": publication_status(adapter_path),
