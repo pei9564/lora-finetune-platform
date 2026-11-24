@@ -9,6 +9,7 @@ from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth.jwt_utils import get_current_user
+from app.train.publication import publication_status, publish_model
 
 router = APIRouter(tags=["Tasks"])
 logger = logging.getLogger(__name__)
@@ -76,10 +77,10 @@ async def get_task_status(task_id: str, user: Dict = Depends(get_current_user)) 
                 "error": str(error),
             }
 
-        return {
-            "status": task.status,
-            "result": task.result,
-        }
+        result = task.result
+        if isinstance(result, dict) and result.get("adapter_path"):
+            result = {**result, "publication": publication_status(result["adapter_path"])}
+        return {"status": task.status, "result": result}
 
     except HTTPException:
         raise
@@ -89,3 +90,21 @@ async def get_task_status(task_id: str, user: Dict = Depends(get_current_user)) 
             raise HTTPException(status_code=408, detail="任務查詢超時")
         else:
             raise HTTPException(status_code=500, detail="內部服務器錯誤")
+
+
+@router.post("/task/{task_id}/publication/retry")
+def retry_task_publication(task_id: str, user: Dict = Depends(get_current_user)) -> Dict:
+    metadata = AsyncResult(task_id).backend.get_task_meta(task_id)
+    result = metadata.get("result")
+    if metadata.get("status") != "SUCCESS" or not isinstance(result, dict):
+        raise HTTPException(status_code=409, detail="訓練尚未成功完成")
+
+    owner = result.get("config", {}).get("user_id")
+    if user["role"] != "admin" and owner != user["user_id"]:
+        raise HTTPException(status_code=403, detail="無權重試此任務")
+    if not result.get("adapter_path"):
+        raise HTTPException(status_code=409, detail="此任務沒有可重試的發布紀錄")
+    try:
+        return publish_model(result["adapter_path"])
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=409, detail="找不到發布紀錄或產物") from exc

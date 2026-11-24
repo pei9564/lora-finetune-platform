@@ -24,9 +24,9 @@ from transformers import (
 
 from app.core.config import Config
 from app.core.mlflow_config import init_mlflow
-from app.models.model_registry import ModelCard, registry
 from app.tools.artifact_utils import save_artifact
 from app.train.evaluator import TrainingProgressCallback, compute_metrics
+from app.train.publication import prepare_publication, publish_model
 
 logger = logging.getLogger(__name__)
 
@@ -333,60 +333,9 @@ def train_and_evaluate(
 
             save_artifact(output_dir, run.info.run_id)
 
-            # 記錄模型到 MLflow
-            model_name = config.model.name.split("/")[-1]  # Get base name without org
-            logger.info("📦 記錄模型到 MLflow...")
-
-            # 使用 mlflow.pytorch.save_model 先保存到臨時目錄
-            temp_model_dir = os.path.join(output_dir, "mlflow_model")
-            os.makedirs(temp_model_dir, exist_ok=True)
-            # Preserve the existing full-model format for internally trained models.
-            mlflow.pytorch.save_model(
-                trainer.model, temp_model_dir, serialization_format="pickle"
+            prepare_publication(
+                output_dir, run.info.run_id, run.info.run_name, config, eval_result, trainer.model
             )
-
-            # 使用 log_artifacts 記錄到 MLflow
-            mlflow.log_artifacts(temp_model_dir, "final_model")
-
-            # 註冊模型到 MLflow Registry
-            model_uri = f"runs:/{run.info.run_id}/final_model"
-            logger.info("📝 註冊模型到 MLflow Registry...")
-            registered_model = mlflow.register_model(
-                model_uri=model_uri, name=model_name
-            )
-            logger.info(
-                f"✅ 模型已註冊到 MLflow Registry: {model_name} v{registered_model.version}"
-            )
-
-            # 設置模型到 Staging 階段
-            client = mlflow.tracking.MlflowClient()
-            client.transition_model_version_stage(
-                name=model_name, version=registered_model.version, stage="Staging"
-            )
-            logger.info(
-                f"✅ 已將模型設置為 Staging 階段: {model_name} v{registered_model.version}"
-            )
-
-            # 創建模型卡片
-            model_id = f"task_{run.info.run_name}"  # 使用 run name 作為唯一標識
-
-            # 創建新的模型卡片
-            model_card = ModelCard(
-                id=model_id,
-                name=model_name,  # 使用 model_name 而不是 run_name
-                base_model=config.model.name.split("/")[-1],
-                language="en",
-                task="text-classification",
-                description="LoRA fine-tuned model on glue dataset",
-                version=registered_model.version,  # 直接設置版本
-                stage="Staging",  # 直接設置階段
-                run_id=run.info.run_id,
-                tags=["glue", "lora", config.model.name.split("/")[-1]],
-            )
-
-            # 保存模型卡片
-            registry.save_model_card(model_card)
-            logger.info(f"✅ 模型卡片已創建: {model_id}")
 
             # Log training logs if exists
             log_file = os.path.join(str(trainer.args.output_dir), "logs.txt")
@@ -411,8 +360,6 @@ def train_and_evaluate(
             logger.info(f"   - 驗證準確率: {eval_result['eval_accuracy']:.4f}")
             logger.info(f"   - 模型保存位置: {output_dir}")
 
-            return train_result, eval_result, run.info.run_id
-
         except RuntimeError as e:
             if "out of memory" in str(e):
                 if torch.cuda.is_available():
@@ -430,3 +377,6 @@ def train_and_evaluate(
                         f"CPU 記憶體不足: 已使用 {current_memory:.1f}GB / 總計 {total_memory:.1f}GB"
                     ) from e
             raise
+
+    publish_model(output_dir, trainer.model)
+    return train_result, eval_result, run.info.run_id

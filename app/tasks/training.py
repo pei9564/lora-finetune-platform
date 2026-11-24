@@ -5,6 +5,7 @@ from copy import deepcopy
 from datetime import datetime
 from time import perf_counter
 from typing import Dict
+from uuid import uuid4
 
 from celery.exceptions import SoftTimeLimitExceeded
 from celery.signals import task_failure
@@ -29,6 +30,7 @@ from app.train import (
     setup_training,
     train_and_evaluate,
 )
+from app.train.publication import publication_status
 from app.monitor.exporter import record_task_failure, record_task_success
 
 # 配置任務錯誤日誌
@@ -125,7 +127,8 @@ def train_lora(config: Dict) -> Dict:
 
         # 設置實驗目錄（使用實驗名稱和時間戳）
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        exp_dir = os.path.join("results", f"{config.experiment_name}_{timestamp}")
+        name = os.path.basename(config.experiment_name)
+        exp_dir = os.path.join("results", f"{name}_{timestamp}_{uuid4().hex}")
         os.makedirs(exp_dir, exist_ok=True)
 
         # 設置輸出目錄
@@ -166,6 +169,8 @@ def train_lora(config: Dict) -> Dict:
         duration = perf_counter() - start_time
         record_task_success(duration_seconds=duration)
 
+        adapter_path = os.path.join(config.training.output_dir, "final_model")
+
         # 返回結果
         return {
             "status": "success",
@@ -176,6 +181,8 @@ def train_lora(config: Dict) -> Dict:
             "eval": {"accuracy": eval_result["eval_accuracy"]},
             "model_id": model_card.id,
             "mlflow_run_id": mlflow_run_id,
+            "adapter_path": adapter_path,
+            "publication": publication_status(adapter_path),
             "config": {
                 "experiment_name": config.experiment_name,
                 "user_id": config.user_id,

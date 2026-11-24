@@ -139,6 +139,9 @@ def mock_mlflow(monkeypatch, tmp_path):
         def search_runs(self, *args, **kwargs):
             return pd.DataFrame([])
 
+        def log_artifacts(self, *args, **kwargs):
+            return None
+
         def search_model_versions(self, *args, **kwargs):
             return []
 
@@ -261,6 +264,7 @@ def mock_mlflow(monkeypatch, tmp_path):
     modules_to_patch = [
         "app.core.mlflow_config",
         "app.train.runner",
+        "app.train.publication",
         "app.train.evaluator",
         "app.models.model_registry",
         "app.api.routes.mlflow",

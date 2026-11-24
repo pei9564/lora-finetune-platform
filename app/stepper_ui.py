@@ -619,7 +619,13 @@ def render_task_progress():
                     elif status == "STARTED":
                         st.info("🚀 任務正在執行中...")
                     elif status == "SUCCESS":
-                        st.success("✅ 任務已完成！")
+                        publication = result.get("result", {}).get("publication", {})
+                        if publication.get("status") in ("failed", "pending"):
+                            st.warning("訓練已完成，模型尚未發布。")
+                            st.session_state["retry_publication_task"] = task_id
+                        else:
+                            st.success("✅ 任務已完成！")
+                            st.session_state.pop("retry_publication_task", None)
                     elif status == "FAILURE":
                         st.error("❌ 任務執行失敗")
                     else:
@@ -639,6 +645,24 @@ def render_task_progress():
             st.markdown("1. 確認任務 ID 是否正確")
             st.markdown("2. 檢查網路連接")
             st.markdown("3. 稍後再試")
+
+    if task_id and st.session_state.get("retry_publication_task") == task_id:
+        if st.button("重試模型發布"):
+            try:
+                response = requests.post(
+                    f"{API_URL}/task/{task_id}/publication/retry",
+                    headers={"Authorization": f"Bearer {st.session_state.jwt_token}"},
+                    timeout=120,
+                )
+                response.raise_for_status()
+                publication = response.json()
+                if publication["status"] == "published":
+                    st.success(f"模型發布成功，版本 {publication['version']}。")
+                    st.session_state.pop("retry_publication_task", None)
+                else:
+                    st.error(publication["error"])
+            except requests.RequestException as exc:
+                st.error(f"無法重試模型發布：{exc}")
 
 
 def main():
