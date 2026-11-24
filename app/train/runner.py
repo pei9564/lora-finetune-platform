@@ -340,7 +340,10 @@ def train_and_evaluate(
             # 使用 mlflow.pytorch.save_model 先保存到臨時目錄
             temp_model_dir = os.path.join(output_dir, "mlflow_model")
             os.makedirs(temp_model_dir, exist_ok=True)
-            mlflow.pytorch.save_model(trainer.model, temp_model_dir)
+            # Preserve the existing full-model format for internally trained models.
+            mlflow.pytorch.save_model(
+                trainer.model, temp_model_dir, serialization_format="pickle"
+            )
 
             # 使用 log_artifacts 記錄到 MLflow
             mlflow.log_artifacts(temp_model_dir, "final_model")

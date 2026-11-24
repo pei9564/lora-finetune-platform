@@ -172,7 +172,7 @@ def mock_mlflow(monkeypatch, tmp_path):
                 ViewType=types.SimpleNamespace(ACTIVE_ONLY=0)
             )
             self.pytorch = types.SimpleNamespace(
-                save_model=lambda model, path: Path(path).mkdir(
+                save_model=lambda model, path, *, serialization_format: Path(path).mkdir(
                     parents=True, exist_ok=True
                 )
             )
