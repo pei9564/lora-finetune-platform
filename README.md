@@ -61,6 +61,7 @@ Open [Swagger UI](http://localhost:8000/docs) for request schemas and response d
 | `GET /task/{task_id}` | Read training results and publication status |
 | `POST /task/{task_id}/publication/retry` | Retry publishing a completed training result |
 | `GET /mlflow` | Browse MLflow runs |
+| `GET /models/search` | Find model cards with evaluation metrics, adapter and config paths, and MLflow publication details |
 | `GET /metrics` | Expose Prometheus metrics |
 
 ## Development and deployment

@@ -139,6 +139,9 @@ def mock_mlflow(monkeypatch, tmp_path):
         def search_runs(self, *args, **kwargs):
             return pd.DataFrame([])
 
+        def log_artifact(self, *args, **kwargs):
+            return None
+
         def log_artifacts(self, *args, **kwargs):
             return None
 

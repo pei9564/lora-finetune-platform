@@ -26,7 +26,7 @@ services:
       - ./app:/app/app
       - ./config:/app/config
       - ./data:/app/data
-      - ./mlruns:/app/mlruns
+      - ./mlruns:/mlruns
       - prometheus_multiproc:/tmp/prometheus
     depends_on:
       redis:
@@ -57,7 +57,7 @@ services:
       - ./app:/app/app
       - ./config:/app/config
       - ./data:/app/data
-      - ./mlruns:/app/mlruns
+      - ./mlruns:/mlruns
       - prometheus_multiproc:/tmp/prometheus
     depends_on:
       redis:

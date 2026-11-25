@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from tempfile import NamedTemporaryFile
 from typing import Dict, List, Optional
 
 import mlflow
@@ -43,6 +44,12 @@ class ModelCard(BaseModel):
         None, description="MLflow run ID associated with this model"
     )
 
+    experiment_name: Optional[str] = None
+    adapter_path: Optional[str] = None
+    config_path: Optional[str] = None
+    config_artifact: Optional[str] = None
+    publication_status: Optional[str] = None
+
     class Config:
         json_encoders = {np.ndarray: lambda x: x.tolist()}
 
@@ -76,13 +83,19 @@ class ModelRegistry:
 
     def save_model_card(self, model_card: ModelCard) -> bool:
         """Save a model card to storage"""
+        temporary_path = None
         try:
             file_path = os.path.join(self.storage_dir, f"{model_card.id}.json")
             logger.info(f"保存模型卡片到: {file_path}")
             logger.info(f"模型卡片內容: {model_card.model_dump()}")
 
-            with open(file_path, "w", encoding="utf-8") as f:
+            with NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=self.storage_dir, delete=False
+            ) as f:
+                temporary_path = f.name
                 json.dump(model_card.model_dump(), f, indent=2, ensure_ascii=False)
+            os.replace(temporary_path, file_path)
+            temporary_path = None
             self.models[model_card.id] = model_card
 
             logger.info("✅ 模型卡片保存成功")
@@ -90,6 +103,9 @@ class ModelRegistry:
         except Exception as e:
             logger.error(f"❌ 保存模型卡片失敗: {e}")
             return False
+        finally:
+            if temporary_path is not None:
+                os.unlink(temporary_path)
 
     def search_models(
         self,

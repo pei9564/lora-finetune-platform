@@ -222,7 +222,7 @@ def setup_training(
 
 
 def train_and_evaluate(
-    config: Config, trainer: Trainer
+    config: Config, trainer: Trainer, *, config_path: Optional[str] = None
 ) -> Tuple[Dict, Optional[Dict], str]:
     """訓練與評估
 
@@ -334,7 +334,7 @@ def train_and_evaluate(
             save_artifact(output_dir, run.info.run_id)
 
             prepare_publication(
-                output_dir, run.info.run_id, run.info.run_name, config, eval_result, trainer.model
+                output_dir, run.info.run_id, config, eval_result, trainer.model, config_path
             )
 
             # Log training logs if exists
@@ -343,13 +343,6 @@ def train_and_evaluate(
                 mlflow.log_artifact(log_file, "logs")
             else:
                 logger.warning("⚠️ 找不到訓練日誌文件")
-
-            # Log config file if exists
-            config_path = os.path.join(str(trainer.args.output_dir), "config.yaml")
-            if os.path.exists(config_path):
-                mlflow.log_artifact(config_path, "config")
-            else:
-                logger.warning("⚠️ 找不到配置文件")
 
             # 訓練總結
             logger.info("🎯 訓練總結:")
